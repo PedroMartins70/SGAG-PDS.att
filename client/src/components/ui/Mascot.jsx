@@ -16,17 +16,17 @@ export default function Mascot({ className = '' }) {
       role="img"
       aria-label="Coruja Sabedoria"
     >
-      <circle cx="50" cy="50" r="46" fill="#EDE9FE" />
+      <circle cx="50" cy="50" r="46" fill="#DBEAFE" />
       {/* corpo */}
-      <path d="M25 46c0-13 11-22 25-22s25 9 25 22c0 17-11 27-25 27S25 63 25 46Z" fill="#6C5CE7" />
+      <path d="M25 46c0-13 11-22 25-22s25 9 25 22c0 17-11 27-25 27S25 63 25 46Z" fill="#2563EB" />
       {/* asas */}
-      <path d="M22 42c-7 2-10 8-8 15 1 6 5 10 10 11l-3-13Z" fill="#5B21B6" />
-      <path d="M78 42c7 2 10 8 8 15-1 6-5 10-10 11l3-13Z" fill="#5B21B6" />
+      <path d="M22 42c-7 2-10 8-8 15 1 6 5 10 10 11l-3-13Z" fill="#1D4ED8" />
+      <path d="M78 42c7 2 10 8 8 15-1 6-5 10-10 11l3-13Z" fill="#1D4ED8" />
       {/* olhos */}
       <circle cx="37" cy="45" r="9.5" fill="#F8FAFC" />
       <circle cx="63" cy="45" r="9.5" fill="#F8FAFC" />
-      <circle cx="37" cy="45" r="3.6" fill="#1E3A8A" />
-      <circle cx="63" cy="45" r="3.6" fill="#1E3A8A" />
+      <circle cx="37" cy="45" r="3.6" fill="#1E293B" />
+      <circle cx="63" cy="45" r="3.6" fill="#1E293B" />
       {/* bico */}
       <path d="M46 52h8l-4 6Z" fill="#F59E0B" />
       {/* livro nas asas */}

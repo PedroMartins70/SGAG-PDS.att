@@ -1,15 +1,68 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, Shield, BarChart3, User } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
 import Input from '../components/ui/Input.jsx';
-import Mascot from '../components/ui/Mascot.jsx';
 import ThemeToggle from '../components/ui/ThemeToggle.jsx';
 import { useAuth } from '../auth/AuthContext.jsx';
 
 /**
+ * Ícone de logo do SGAG-PDS (versão inline, sem dependências externas).
+ */
+function LogoIcon({ className = '' }) {
+  return (
+    <svg viewBox="0 0 40 40" className={className} aria-hidden="true">
+      <circle cx="20" cy="20" r="18" fill="#2563EB" />
+      <path d="M12 20c0-4.4 3.6-8 8-8s8 3.6 8 8-3.6 8-8 8-8-3.6-8-8Z" fill="#FFFFFF" opacity="0.3" />
+      <path d="M16 18l3 3 5-5" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </svg>
+  );
+}
+
+/**
+ * Ilustração decorativa da coluna esquerda do login.
+ * Composta por elementos SVG: gráfico, escudo, planta.
+ */
+function IlustracaoLogin() {
+  return (
+    <div className="relative hidden w-full md:block">
+      <div className="flex h-full flex-col items-center justify-center gap-8 p-8">
+        {/* Gráfico de barras */}
+        <div className="relative rounded-2xl border border-border bg-surface p-6 shadow-lg">
+          <div className="flex items-end gap-3">
+            <div className="h-16 w-8 rounded-t-lg bg-primary/80" />
+            <div className="h-24 w-8 rounded-t-lg bg-primary" />
+            <div className="h-12 w-8 rounded-t-lg bg-primary/60" />
+            <div className="h-20 w-8 rounded-t-lg bg-primary/90" />
+          </div>
+          <div className="mt-3 h-1 w-full rounded-full bg-success" />
+        </div>
+
+        {/* Escudo com cadeado */}
+        <div className="flex items-center gap-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary-soft">
+            <Shield className="h-8 w-8 text-primary" />
+          </div>
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-success-soft">
+            <Lock className="h-8 w-8 text-success" />
+          </div>
+        </div>
+
+        {/* Planta decorativa */}
+        <svg viewBox="0 0 80 100" className="h-20 w-16" aria-hidden="true">
+          <rect x="25" y="60" width="30" height="35" rx="4" fill="#CBD5E1" />
+          <path d="M40 60c0-15-12-25-12-40s12-10 12 0c0-10 12-15 12 0s-12 25-12 40Z" fill="#22C55E" />
+          <path d="M40 50c-8 0-18-5-20-15 10 2 16 8 20 15Z" fill="#16A34A" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Tela de login (primeira página). Autentica o usuário e redireciona ao painel.
+ * Layout dividido: ilustração à esquerda, formulário à direita.
  *
  * @returns {JSX.Element} Tela de login.
  */
@@ -22,18 +75,12 @@ export default function Login() {
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
 
-  // Redireciona ao painel assim que a sessão estiver disponível.
   useEffect(() => {
     if (session) {
       navigate('/dashboard');
     }
   }, [session, navigate]);
 
-  /**
-   * Envia o formulário de login.
-   *
-   * @param {React.FormEvent} evento Evento de submissão.
-   */
   async function handleSubmit(evento) {
     evento.preventDefault();
     setErro('');
@@ -48,66 +95,95 @@ export default function Login() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-canvas p-4">
-      <div className="absolute right-4 top-4">
+    <div className="relative flex min-h-screen bg-canvas">
+      <div className="absolute right-4 top-4 z-10">
         <ThemeToggle />
       </div>
-      <Card className="w-full max-w-md p-6 sm:p-8">
-        <div className="mb-6 flex flex-col items-center gap-3 text-center">
-          <Mascot className="h-16 w-16" />
-          <h1 className="font-display text-2xl font-bold text-text">Bem-vindo!</h1>
-          <p className="text-text-muted">Acesse sua conta para continuar.</p>
+
+      {/* Coluna esquerda — ilustração e branding */}
+      <div className="hidden w-1/2 flex-col items-center justify-center bg-primary/5 lg:flex">
+        <div className="flex flex-col items-center gap-6 px-8 text-center">
+          <div className="flex items-center gap-3">
+            <LogoIcon className="h-10 w-10" />
+            <div className="text-left">
+              <h2 className="font-display text-xl font-bold text-primary">SGAG-PDS</h2>
+              <p className="text-xs text-text-muted">Sistema de Gestão e Avaliação</p>
+            </div>
+          </div>
+          <IlustracaoLogin />
+          <div className="max-w-xs">
+            <h3 className="font-display text-2xl font-bold text-text">
+              Organize seus grupos
+              <span className="text-primary"> de forma simples.</span>
+            </h3>
+            <p className="mt-2 text-sm text-text-muted">
+              Cadastre-se para acessar o sistema e gerenciar seu projeto de forma simples, organizada e eficiente.
+            </p>
+          </div>
         </div>
+      </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="E-mail"
-            type="email"
-            icon={Mail}
-            placeholder="seunome@gmail.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
+      {/* Coluna direita — formulário */}
+      <div className="flex w-full items-center justify-center p-4 lg:w-1/2">
+        <Card className="w-full max-w-md p-6 sm:p-8">
+          <div className="mb-6 flex flex-col items-center gap-3 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-soft">
+              <User className="h-7 w-7 text-primary" />
+            </div>
+            <h1 className="font-display text-2xl font-bold text-text">Bem-vindo!</h1>
+            <p className="text-text-muted">Acesse sua conta para continuar.</p>
+          </div>
 
-          <div className="relative">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              label="Senha"
-              type={mostrar ? 'text' : 'password'}
-              icon={Lock}
-              placeholder="Sua senha"
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
+              label="E-mail"
+              type="email"
+              icon={Mail}
+              placeholder="seunome@gmail.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required
             />
-            <button
-              type="button"
-              onClick={() => setMostrar((v) => !v)}
-              aria-label={mostrar ? 'Ocultar senha' : 'Mostrar senha'}
-              className="absolute right-3.5 top-10 text-text-muted transition-colors hover:text-text"
-            >
-              {mostrar ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-            </button>
-          </div>
 
-          {erro && (
-            <div className="rounded-lg border border-danger-soft bg-danger-soft px-3 py-2 text-sm font-medium text-danger">
-              {erro}
+            <div className="relative">
+              <Input
+                label="Senha"
+                type={mostrar ? 'text' : 'password'}
+                icon={Lock}
+                placeholder="Sua senha"
+                value={senha}
+                onChange={(e) => setSenha(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setMostrar((v) => !v)}
+                aria-label={mostrar ? 'Ocultar senha' : 'Mostrar senha'}
+                className="absolute right-3.5 top-10 text-text-muted transition-colors hover:text-text"
+              >
+                {mostrar ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
             </div>
-          )}
 
-          <Button type="submit" className="w-full" disabled={carregando || !email || !senha}>
-            {carregando ? 'Entrando...' : 'Entrar'}
-          </Button>
+            {erro && (
+              <div className="rounded-lg border border-danger-soft bg-danger-soft px-3 py-2 text-sm font-medium text-danger">
+                {erro}
+              </div>
+            )}
 
-          <div className="flex items-center justify-center gap-1 pt-1">
-            <span className="text-sm text-text-muted">Ainda não tem conta?</span>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/cadastro/professor')}>
-              Cadastre-se
+            <Button type="submit" className="w-full" disabled={carregando || !email || !senha}>
+              {carregando ? 'Entrando...' : 'Entrar'}
             </Button>
-          </div>
-        </form>
-      </Card>
+
+            <div className="flex items-center justify-center gap-1 pt-1">
+              <span className="text-sm text-text-muted">Ainda não tem conta?</span>
+              <Button variant="ghost" size="sm" onClick={() => navigate('/cadastro/professor')}>
+                Cadastre-se
+              </Button>
+            </div>
+          </form>
+        </Card>
+      </div>
     </div>
   );
 }

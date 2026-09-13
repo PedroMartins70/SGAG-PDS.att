@@ -27,14 +27,14 @@ describe('Fluxo de autenticação', () => {
     fireEvent.click(screen.getByRole('button', { name: /cadastre-se/i }));
 
     expect(
-      await screen.findByRole('heading', { name: /cadastro do professor/i })
+      await screen.findByRole('heading', { name: /cadastrar nova conta/i })
     ).toBeInTheDocument();
   });
 
   it('cadastro do professor contem email e senha (sem codigo de verificacao)', () => {
     renderAt('/cadastro/professor');
 
-    expect(screen.getByRole('heading', { name: /cadastro do professor/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /cadastrar nova conta/i })).toBeInTheDocument();
     expect(screen.getByLabelText('E-mail')).toBeInTheDocument();
     expect(screen.getByLabelText('Senha')).toBeInTheDocument();
     expect(screen.queryByLabelText('Código de verificação')).not.toBeInTheDocument();
@@ -54,7 +54,7 @@ describe('Fluxo de autenticação', () => {
     fireEvent.change(screen.getByLabelText('Senha'), { target: { value: 'Senha123' } });
     fireEvent.change(screen.getByLabelText('Confirmar senha'), { target: { value: 'Senha123' } });
 
-    fireEvent.click(screen.getByRole('button', { name: /^cadastrar$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /criar conta/i }));
 
     expect(await screen.findByRole('heading', { name: /bem-vindo/i })).toBeInTheDocument();
   });

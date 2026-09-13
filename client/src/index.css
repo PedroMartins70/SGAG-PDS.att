@@ -55,20 +55,20 @@
 
 :root {
   /* Superfícies */
-  --canvas: #F8FAFC;
+  --canvas: #EEF2F7;
   --surface: #FFFFFF;
-  --surface-muted: #F1F5F9;
-  --border: #E2E8F0;
+  --surface-muted: #E2E8F0;
+  --border: #CBD5E1;
 
-  /* Primária — Azul Profundo */
-  --primary: #1E3A8A;
-  --primary-hover: #172A5E;
+  /* Primária — Azul Brilhante */
+  --primary: #2563EB;
+  --primary-hover: #1D4ED8;
   --primary-soft: #DBEAFE;
   --primary-foreground: #FFFFFF;
 
-  /* Secundária — Índigo */
-  --secondary: #6C5CE7;
-  --secondary-hover: #5B21B6;
+  /* Secundária — Verde */
+  --secondary: #16A34A;
+  --secondary-hover: #15803D;
   --secondary-foreground: #FFFFFF;
 
   /* Acentos */
@@ -80,14 +80,14 @@
   --danger-soft: #FEE2E2;
 
   /* Texto (alto contraste) */
-  --text: #0F172A;
+  --text: #1E293B;
   --text-muted: #64748B;
 
   /* Badges pastéis */
-  --badge-lider-bg: #EDE9FE;
-  --badge-lider-text: #5B21B6;
-  --badge-vice-bg: #E0F2FE;
-  --badge-vice-text: #0369A1;
+  --badge-lider-bg: #DBEAFE;
+  --badge-lider-text: #1E40AF;
+  --badge-vice-bg: #D1FAE5;
+  --badge-vice-text: #166534;
   --badge-aluno-bg: #F1F5F9;
   --badge-aluno-text: #475569;
   --badge-professor-bg: #DBEAFE;
@@ -110,30 +110,30 @@ body {
 
 /* Foco visível e acessível (navegação por teclado — importante para idosos) */
 :focus-visible {
-  outline: 3px solid rgba(30, 58, 138, 0.45);
+  outline: 3px solid rgba(37, 99, 235, 0.45);
   outline-offset: 2px;
   border-radius: 10px;
 }
 
 /*
-  TEMA ESCURO — Roxo Escuro
-  Paleta aconchegante baseada em tons de roxo profundo, com contraste
-  elevado e acentos violeta. Ativado pelo atributo data-theme="dark".
+  TEMA ESCURO — Azul Escuro
+  Paleta escura com acentos azuis brilhantes.
+  Ativado pelo atributo data-theme="dark".
 */
 :root[data-theme='dark'] {
-  --canvas: #120A1E;
-  --surface: #1B1130;
-  --surface-muted: #271A42;
-  --border: #2E2050;
+  --canvas: #0F172A;
+  --surface: #1E293B;
+  --surface-muted: #334155;
+  --border: #475569;
 
-  --primary: #8B5CF6;
-  --primary-hover: #7C3AED;
-  --primary-soft: #32205B;
+  --primary: #3B82F6;
+  --primary-hover: #60A5FA;
+  --primary-soft: #1E3A5F;
   --primary-foreground: #FFFFFF;
 
-  --secondary: #A78BFA;
-  --secondary-hover: #8B5CF6;
-  --secondary-foreground: #120A1E;
+  --secondary: #34D399;
+  --secondary-hover: #6EE7B7;
+  --secondary-foreground: #0F172A;
 
   --success: #34D399;
   --success-soft: #123A33;
@@ -142,22 +142,22 @@ body {
   --danger: #F87171;
   --danger-soft: #3B1A24;
 
-  --text: #EDE9FE;
-  --text-muted: #B8ADD0;
+  --text: #F1F5F9;
+  --text-muted: #94A3B8;
 
-  --badge-lider-bg: #4C1D95;
-  --badge-lider-text: #DDD6FE;
-  --badge-vice-bg: #0C4A6E;
-  --badge-vice-text: #BAE6FD;
+  --badge-lider-bg: #1E3A5F;
+  --badge-lider-text: #93C5FD;
+  --badge-vice-bg: #14532D;
+  --badge-vice-text: #86EFAC;
   --badge-aluno-bg: #334155;
   --badge-aluno-text: #CBD5E1;
-  --badge-professor-bg: #312E81;
-  --badge-professor-text: #C7D2FE;
+  --badge-professor-bg: #1E3A5F;
+  --badge-professor-text: #93C5FD;
 }
 
-/* Foco no tema escuro (violeta) */
+/* Foco no tema escuro (azul) */
 :root[data-theme='dark'] :focus-visible {
-  outline-color: rgba(139, 92, 246, 0.6);
+  outline-color: rgba(59, 130, 246, 0.6);
 }
 
 /* Respeita a preferência por menos movimento */
