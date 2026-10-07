@@ -7,6 +7,7 @@ import Dashboard from './screens/Dashboard.jsx';
 import Grupos from './screens/Grupos.jsx';
 import NovoGrupo from './screens/NovoGrupo.jsx';
 import DetalheGrupo from './screens/DetalheGrupo.jsx';
+import Historico from './screens/Historico.jsx';
 
 /**
  * Guarda de rota: exige sessão autenticada; caso contrário redireciona ao login.
@@ -84,6 +85,14 @@ export default function App() {
               <RequireProfessor>
                 <DetalheGrupo />
               </RequireProfessor>
+            }
+          />
+          <Route
+            path="/grupos/:grupoId/historico"
+            element={
+              <RequireAuth>
+                <Historico />
+              </RequireAuth>
             }
           />
           <Route path="/" element={<Navigate to="/login" replace />} />

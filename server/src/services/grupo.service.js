@@ -373,13 +373,15 @@ export async function designarViceLider({ grupoId, perfilId, professorId }) {
 
 /**
  * Obtém o detalhe completo de um grupo (página de expansão do Professor):
- * líder, vice-líder, integrantes com avaliação e média geral do grupo.
+ * líder, vice-líder, integrantes com avaliação e média geral do grupo,
+ * em um bimestre específico.
  *
  * @param {string} grupoId UUID do grupo.
+ * @param {number} [bimestre=1] Bimestre a ser consultado (1 a 4).
  * @returns {Promise<Object>} Detalhe do grupo.
  * @throws {AppError} 404 se o grupo não existir.
  */
-export async function obterGrupoDetalhado(grupoId) {
+export async function obterGrupoDetalhado(grupoId, bimestre = 1) {
   const { data: grupo, error } = await supabaseAdmin
     .from('grupos')
     .select(
@@ -396,7 +398,7 @@ export async function obterGrupoDetalhado(grupoId) {
 
   const [resultIntegrantes, resultAvaliacoes] = await Promise.all([
     supabaseAdmin.from('integrantes').select('id, nome_aluno').eq('grupo_id', grupoId).order('nome_aluno'),
-    supabaseAdmin.from('avaliacoes').select('*').eq('grupo_id', grupoId),
+    supabaseAdmin.from('avaliacoes').select('*').eq('grupo_id', grupoId).eq('bimestre', bimestre),
   ]);
 
   if (resultIntegrantes.error || resultAvaliacoes.error) {
@@ -412,6 +414,7 @@ export async function obterGrupoDetalhado(grupoId) {
         ? {
             id: avaliacao.id,
             avaliador_id: avaliacao.avaliador_id,
+            bimestre: avaliacao.bimestre,
             interesse: avaliacao.interesse,
             entrega_prazo: avaliacao.entrega_prazo,
             participacao: avaliacao.participacao,
@@ -434,6 +437,7 @@ export async function obterGrupoDetalhado(grupoId) {
     nome: grupo.nome,
     lider: grupo.lider,
     vice: grupo.vice,
+    bimestre,
     integrantes,
     media_geral: mediaGeral === null ? null : Number(mediaGeral.toFixed(2)),
   };

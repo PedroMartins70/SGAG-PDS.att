@@ -47,20 +47,37 @@ async function buscarIntegranteDoGrupo(grupoId, integranteId) {
 }
 
 /**
- * Calcula a permissão de edição de avaliações para o usuário no grupo.
+ * Valida se o bimestre informado é válido (1 a 4).
+ *
+ * @param {number} bimestre Bimestre informado.
+ * @throws {AppError} 400 se o bimestre for inválido.
+ */
+function validarBimestre(bimestre) {
+  const valor = Number(bimestre);
+  if (!valor || valor < 1 || valor > 4) {
+    throw new AppError(400, 'Bimestre invalido (deve ser um numero entre 1 e 4)');
+  }
+  return valor;
+}
+
+/**
+ * Calcula a permissão de edição de avaliações para o usuário no grupo,
+ * para um bimestre específico.
  *
  * Regras:
  * - Professor: sempre pode editar.
- * - Líder: pode editar (se for o líder do grupo).
- * - Vice-Líder: pode editar apenas se o Líder ainda não tiver submetido.
+ * - Líder: pode editar (se for o líder do grupo), exceto avaliações já
+ *   alteradas pelo professor (controlado individualmente por integrante).
+ * - Vice-Líder: pode editar apenas se o Líder ainda não tiver submetido
+ *   neste bimestre.
  *
  * @param {Object} grupo Grupo consultado.
- * @param {Object} avaliacoes Avaliações existentes do grupo.
+ * @param {Object[]} avaliacoesDoBimestre Avaliações existentes do grupo neste bimestre.
  * @param {Object} usuario Usuário autenticado.
  * @returns {{podeEditar: boolean, motivo: string|null, liderSubmeteu: boolean}} Resultado da análise.
  */
-function calcularPermissao(grupo, avaliacoes, usuario) {
-  const liderSubmeteu = avaliacoes.some((a) => a.avaliador_id === grupo.lider_id);
+function calcularPermissao(grupo, avaliacoesDoBimestre, usuario) {
+  const liderSubmeteu = avaliacoesDoBimestre.some((a) => a.avaliador_id === grupo.lider_id);
 
   let podeEditar = false;
   let motivo = null;
@@ -86,19 +103,21 @@ function calcularPermissao(grupo, avaliacoes, usuario) {
 }
 
 /**
- * Lista as avaliações do grupo juntamente com os integrantes e a
- * permissão de edição do usuário autenticado.
+ * Lista as avaliações do grupo em um bimestre específico, juntamente com
+ * os integrantes e a permissão de edição do usuário autenticado.
  *
  * @param {string} grupoId UUID do grupo.
  * @param {Object} usuario Usuário autenticado.
- * @returns {Promise<Object>} Grupo, integrantes com avaliação e permissão.
+ * @param {number} [bimestre=1] Bimestre a ser consultado (1 a 4).
+ * @returns {Promise<Object>} Grupo, bimestre, integrantes com avaliação e permissão.
  */
-export async function listarAvaliacoes(grupoId, usuario) {
+export async function listarAvaliacoes(grupoId, usuario, bimestre = 1) {
+  const bimestreValido = validarBimestre(bimestre);
   const grupo = await buscarGrupo(grupoId);
 
   const [resultIntegrantes, resultAvaliacoes] = await Promise.all([
     supabaseAdmin.from('integrantes').select('id, nome_aluno').eq('grupo_id', grupoId).order('nome_aluno'),
-    supabaseAdmin.from('avaliacoes').select('*').eq('grupo_id', grupoId),
+    supabaseAdmin.from('avaliacoes').select('*').eq('grupo_id', grupoId).eq('bimestre', bimestreValido),
   ]);
 
   if (resultIntegrantes.error || resultAvaliacoes.error) {
@@ -112,28 +131,39 @@ export async function listarAvaliacoes(grupoId, usuario) {
 
   return {
     grupo: { id: grupo.id, turma_id: grupo.turma_id, nome: grupo.nome, lider_id: grupo.lider_id, vice_lider_id: grupo.vice_lider_id },
+    bimestre: bimestreValido,
     integrantes,
     permissao: calcularPermissao(grupo, resultAvaliacoes.data, usuario),
   };
 }
 
 /**
- * Submete (cria ou atualiza) a avaliação individual de um integrante.
+ * Submete (cria ou atualiza) a avaliação individual de um integrante em
+ * um bimestre específico.
  *
  * Trava de concorrência Líder vs. Vice-Líder:
- * - O Líder tem prioridade e pode submeter/sobrescrever a qualquer momento.
- * - O Vice-Líder só pode submeter se o Líder ainda não tiver submetido.
+ * - O Líder tem prioridade e pode submeter/sobrescrever a qualquer momento
+ *   (enquanto o professor não tiver alterado a nota).
+ * - O Vice-Líder só pode submeter se o Líder ainda não tiver submetido
+ *   neste bimestre.
  * - O Professor sempre pode submeter, exigindo comentário de esclarecimento.
+ *
+ * Trava pós-professor:
+ * - Assim que o professor altera uma avaliação (alterado_por_professor = true),
+ *   nem o líder nem o vice-líder podem editá-la novamente; somente o
+ *   professor pode fazer novas alterações a partir daí.
  *
  * @param {Object} params Parâmetros da submissão.
  * @param {string} params.grupoId UUID do grupo.
  * @param {string} params.integranteId UUID do integrante avaliado.
- * @param {Object} params.notas Critérios validados (interesse, entrega_prazo, participacao, qualidade_trabalho, respeito_grupo).
+ * @param {number} params.bimestre Bimestre da avaliação (1 a 4).
+ * @param {Object} params.notas Critérios validados (interesse, entrega_prazo, participacao, qualidade_trabalho, respeito_grupo, comentario_esclarecimento opcional).
  * @param {Object} params.usuario Usuário autenticado.
  * @returns {Promise<Object>} Avaliação persistida.
  * @throws {AppError} 400/403 em violações de permissão ou validação.
  */
-export async function submeterAvaliacao({ grupoId, integranteId, notas, usuario }) {
+export async function submeterAvaliacao({ grupoId, integranteId, bimestre, notas, usuario }) {
+  const bimestreValido = validarBimestre(bimestre);
   const grupo = await buscarGrupo(grupoId);
   await buscarIntegranteDoGrupo(grupoId, integranteId);
 
@@ -142,6 +172,7 @@ export async function submeterAvaliacao({ grupoId, integranteId, notas, usuario 
     .select('*')
     .eq('grupo_id', grupoId)
     .eq('integrante_id', integranteId)
+    .eq('bimestre', bimestreValido)
     .maybeSingle();
 
   if (usuario.role === 'professor') {
@@ -152,11 +183,25 @@ export async function submeterAvaliacao({ grupoId, integranteId, notas, usuario 
     if (usuario.id !== grupo.lider_id) {
       throw new AppError(403, 'Apenas o lider do grupo pode submeter as notas');
     }
+    if (existente?.alterado_por_professor) {
+      throw new AppError(403, 'O professor ja alterou esta avaliacao; somente ele pode edita-la agora');
+    }
   } else if (usuario.role === 'vice_lider') {
     if (usuario.id !== grupo.vice_lider_id) {
       throw new AppError(403, 'Apenas o vice-lider do grupo pode submeter as notas');
     }
-    if (existente?.avaliador_id === grupo.lider_id) {
+    if (existente?.alterado_por_professor) {
+      throw new AppError(403, 'O professor ja alterou esta avaliacao; somente ele pode edita-la agora');
+    }
+
+    const { data: avaliacoesDoBimestre } = await supabaseAdmin
+      .from('avaliacoes')
+      .select('avaliador_id')
+      .eq('grupo_id', grupoId)
+      .eq('bimestre', bimestreValido);
+
+    const liderSubmeteu = (avaliacoesDoBimestre ?? []).some((a) => a.avaliador_id === grupo.lider_id);
+    if (liderSubmeteu && existente?.avaliador_id === grupo.lider_id) {
       throw new AppError(403, 'O lider ja submeteu as notas; o vice-lider esta em modo somente leitura');
     }
   } else {
@@ -168,6 +213,7 @@ export async function submeterAvaliacao({ grupoId, integranteId, notas, usuario 
   const payload = {
     grupo_id: grupoId,
     integrante_id: integranteId,
+    bimestre: bimestreValido,
     avaliador_id: usuario.id,
     interesse: notas.interesse,
     entrega_prazo: notas.entrega_prazo,
@@ -179,15 +225,19 @@ export async function submeterAvaliacao({ grupoId, integranteId, notas, usuario 
     updated_at: new Date().toISOString(),
   };
 
+  console.log('PAYLOAD ENVIADO:', JSON.stringify(payload, null, 2));
+
   const { data, error } = await supabaseAdmin
     .from('avaliacoes')
-    .upsert(payload, { onConflict: 'grupo_id,integrante_id' })
+    .upsert(payload, { onConflict: 'grupo_id,integrante_id,bimestre' })
     .select()
     .single();
 
   if (error) {
+    console.error('ERRO SUPABASE:', JSON.stringify(error, null, 2));
+    console.error('USUARIO QUE TENTOU SALVAR:', JSON.stringify({ id: usuario.id, role: usuario.role }, null, 2));
     if (error.code === '23505') {
-      throw new AppError(409, 'Ja existe uma avaliacao para este integrante');
+      throw new AppError(409, 'Ja existe uma avaliacao para este integrante neste bimestre');
     }
     throw new AppError(400, `Falha ao submeter avaliacao: ${error.message}`);
   }
@@ -195,6 +245,7 @@ export async function submeterAvaliacao({ grupoId, integranteId, notas, usuario 
   await registrarAuditoria('avaliacoes', data.id, existente ? 'UPDATE' : 'INSERT', usuario.id, {
     grupo_id: grupoId,
     integrante_id: integranteId,
+    bimestre: bimestreValido,
     criterios: {
       interesse: notas.interesse,
       entrega_prazo: notas.entrega_prazo,
@@ -210,22 +261,27 @@ export async function submeterAvaliacao({ grupoId, integranteId, notas, usuario 
 }
 
 /**
- * Exclui a avaliação de um integrante (exclusivo do Professor),
- * exigindo comentário de esclarecimento para fins de auditoria.
+ * Exclui a avaliação de um integrante em um bimestre específico
+ * (exclusivo do Professor), exigindo comentário de esclarecimento para
+ * fins de auditoria.
  *
  * @param {Object} params Parâmetros da exclusão.
  * @param {string} params.grupoId UUID do grupo.
  * @param {string} params.integranteId UUID do integrante.
+ * @param {number} params.bimestre Bimestre da avaliação (1 a 4).
  * @param {string} params.comentario Justificativa obrigatória.
  * @param {string} params.professorId UUID do professor executor.
  * @returns {Promise<{success: boolean}>} Resultado da operação.
  */
-export async function excluirAvaliacao({ grupoId, integranteId, comentario, professorId }) {
+export async function excluirAvaliacao({ grupoId, integranteId, bimestre, comentario, professorId }) {
+  const bimestreValido = validarBimestre(bimestre);
+
   const { data: existente } = await supabaseAdmin
     .from('avaliacoes')
     .select('*')
     .eq('grupo_id', grupoId)
     .eq('integrante_id', integranteId)
+    .eq('bimestre', bimestreValido)
     .maybeSingle();
 
   if (!existente) {
@@ -236,16 +292,86 @@ export async function excluirAvaliacao({ grupoId, integranteId, comentario, prof
     .from('avaliacoes')
     .delete()
     .eq('grupo_id', grupoId)
-    .eq('integrante_id', integranteId);
+    .eq('integrante_id', integranteId)
+    .eq('bimestre', bimestreValido);
 
   if (error) {
     throw new AppError(400, `Falha ao excluir avaliacao: ${error.message}`);
   }
 
   await registrarAuditoria('avaliacoes', existente.id, 'DELETE', professorId, {
+    grupo_id: grupoId,
+    integrante_id: integranteId,
+    bimestre: bimestreValido,
     nota_antiga: existente,
     comentario_esclarecimento: comentario,
   });
 
   return { success: true };
+}
+
+/**
+ * Lista o histórico de alterações (auditoria) das avaliações de um grupo,
+ * já com o nome do usuário responsável e do integrante avaliado.
+ *
+ * Acesso permitido para: professor, líder do grupo e vice-líder do grupo.
+ *
+ * @param {string} grupoId UUID do grupo.
+ * @param {Object} usuario Usuário autenticado.
+ * @returns {Promise<Object[]>} Lista de eventos de histórico, mais recente primeiro.
+ * @throws {AppError} 403 se o usuário não tiver relação com o grupo.
+ */
+export async function listarHistorico(grupoId, usuario) {
+  const grupo = await buscarGrupo(grupoId);
+
+  const ehProfessor = usuario.role === 'professor';
+  const ehLider = usuario.id === grupo.lider_id;
+  const ehViceLider = usuario.id === grupo.vice_lider_id;
+
+  if (!ehProfessor && !ehLider && !ehViceLider) {
+    throw new AppError(403, 'Sem permissao para consultar o historico deste grupo');
+  }
+
+  const { data: logs, error } = await supabaseAdmin
+    .from('audit_logs')
+    .select('*')
+    .eq('tabela_afetada', 'avaliacoes')
+    .contains('detalhes', { grupo_id: grupoId })
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw new AppError(500, 'Falha ao consultar historico');
+  }
+
+  const usuarioIds = [...new Set(logs.map((l) => l.usuario_id).filter(Boolean))];
+  const integranteIds = [...new Set(logs.map((l) => l.detalhes?.integrante_id).filter(Boolean))];
+
+  const [resultUsuarios, resultIntegrantes] = await Promise.all([
+    usuarioIds.length
+      ? supabaseAdmin.from('profiles').select('id, nome, role').in('id', usuarioIds)
+      : Promise.resolve({ data: [] }),
+    integranteIds.length
+      ? supabaseAdmin.from('integrantes').select('id, nome_aluno').in('id', integranteIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const usuariosPorId = Object.fromEntries((resultUsuarios.data ?? []).map((u) => [u.id, u]));
+  const integrantesPorId = Object.fromEntries((resultIntegrantes.data ?? []).map((i) => [i.id, i]));
+
+  return logs.map((log) => ({
+    id: log.id,
+    acao: log.acao,
+    data: log.created_at,
+    bimestre: log.detalhes?.bimestre ?? null,
+    usuario: usuariosPorId[log.usuario_id]
+      ? { nome: usuariosPorId[log.usuario_id].nome, role: usuariosPorId[log.usuario_id].role }
+      : null,
+    integrante: integrantesPorId[log.detalhes?.integrante_id]
+      ? { nome: integrantesPorId[log.detalhes.integrante_id].nome_aluno }
+      : null,
+    alterado_por_professor: log.detalhes?.alterado_por_professor ?? false,
+    comentario_esclarecimento: log.detalhes?.comentario_esclarecimento ?? null,
+    criterios: log.detalhes?.criterios ?? null,
+    nota_antiga: log.detalhes?.nota_antiga ?? null,
+  }));
 }

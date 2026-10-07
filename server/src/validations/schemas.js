@@ -22,6 +22,15 @@ const criterioSchema = z
   .refine(ehMultiploDeCincoCentimos, 'O criterio deve ser multiplo de 0.05');
 
 /**
+ * Bimestre (1 a 4), aceito como número ou string vinda de query/body.
+ */
+const bimestreSchema = z.coerce
+  .number()
+  .int('O bimestre deve ser um numero inteiro')
+  .min(1, 'O bimestre deve ser entre 1 e 4')
+  .max(4, 'O bimestre deve ser entre 1 e 4');
+
+/**
  * Schema de autenticação (login).
  */
 export const loginSchema = z.object({
@@ -114,10 +123,20 @@ export const designarPapelSchema = z.object({
 });
 
 /**
+ * Schema de query da listagem de avaliações (bimestre opcional, padrão 1).
+ */
+export const listarAvaliacoesQuerySchema = z.object({
+  bimestre: bimestreSchema.optional().default(1),
+});
+
+/**
  * Schema de submissão de avaliação individual de um integrante.
- * 5 critérios (0.00 a 0.20, passo 0.05) + comentário opcional.
+ * Bimestre (1 a 4) + 5 critérios (0.00 a 0.20, passo 0.05) + comentário opcional
+ * (qualquer perfil pode usar o comentário para justificar a nota; o professor
+ * é obrigado a preenchê-lo, o que é validado na camada de serviço).
  */
 export const avaliacaoSchema = z.object({
+  bimestre: bimestreSchema,
   interesse: criterioSchema,
   entrega_prazo: criterioSchema,
   participacao: criterioSchema,
@@ -127,9 +146,10 @@ export const avaliacaoSchema = z.object({
 });
 
 /**
- * Schema de exclusão de avaliação (Professor). Exige justificativa.
+ * Schema de exclusão de avaliação (Professor). Exige justificativa e o bimestre.
  */
 export const excluirAvaliacaoSchema = z.object({
+  bimestre: bimestreSchema,
   comentario_esclarecimento: z
     .string()
     .min(1, 'O comentario de esclarecimento e obrigatorio para excluir a nota'),

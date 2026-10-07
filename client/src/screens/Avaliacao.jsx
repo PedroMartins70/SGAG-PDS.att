@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Loader2, Save, UserX } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Check, Clock, Loader2, Lock, Save, UserX } from 'lucide-react';
 import Badge from '../components/ui/Badge.jsx';
 import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
@@ -16,34 +17,41 @@ const CRITERIOS = [
   { key: 'respeito_grupo', rotulo: 'Respeito no grupo' },
 ];
 
+/** Bimestres disponíveis para seleção. */
+const BIMESTRES = [1, 2, 3, 4];
+
 /** Valores vazios padrão para cada critério. */
 const vazio = () => Object.fromEntries(CRITERIOS.map((c) => [c.key, '']));
 
 /**
- * Tela de avaliação do Líder/Vice-Líder sobre o seu grupo.
+ * Tela de avaliação do Líder/Vice-Líder sobre o seu grupo, por bimestre.
  * O Líder/Vice avalia cada integrante (inclusive a si mesmo) nos 5 critérios,
- * cuja soma gera uma nota de no máximo 1,00.
+ * cuja soma gera uma nota de no máximo 1,00, podendo justificar a nota com
+ * um comentário opcional. Uma avaliação já alterada pelo professor fica
+ * travada para o Líder/Vice-Líder.
  *
  * @returns {JSX.Element} Tela de avaliação.
  */
 export default function Avaliacao() {
   const { session } = useAuth();
+  const navigate = useNavigate();
   const token = session?.token;
   const nomeUsuario = session?.user?.nome || '';
 
   const [grupo, setGrupo] = useState(null);
+  const [bimestre, setBimestre] = useState(1);
   const [integrantes, setIntegrantes] = useState([]);
   const [permissao, setPermissao] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
 
-  /** Carrega o grupo do usuário e o estado das avaliações. */
+  /** Carrega o grupo do usuário e o estado das avaliações no bimestre atual. */
   const carregar = useCallback(async () => {
     setCarregando(true);
     setErro('');
     try {
       const { grupo: meuGrupo } = await api('/grupos/me', { token });
-      const data = await api(`/grupos/${meuGrupo.id}/avaliacoes`, { token });
+      const data = await api(`/grupos/${meuGrupo.id}/avaliacoes?bimestre=${bimestre}`, { token });
       setGrupo(meuGrupo);
       setIntegrantes(data.integrantes);
       setPermissao(data.permissao);
@@ -52,7 +60,7 @@ export default function Avaliacao() {
     } finally {
       setCarregando(false);
     }
-  }, [token]);
+  }, [token, bimestre]);
 
   useEffect(() => {
     carregar();
@@ -87,7 +95,33 @@ export default function Avaliacao() {
             </div>
           )}
         </div>
-        <p className="text-sm text-text-muted">Avalie cada integrante de 0,00 a 0,20 por critério.</p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm text-text-muted">Avalie cada integrante de 0,00 a 0,20 por critério.</p>
+          <Button variant="outline" size="sm" onClick={() => navigate(`/grupos/${grupo.id}/historico`)}>
+            <Clock className="h-4 w-4" /> Histórico
+          </Button>
+        </div>
+      </div>
+
+      {/* Seletor de bimestre */}
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-semibold text-text">Bimestre:</span>
+        <div className="flex gap-1">
+          {BIMESTRES.map((b) => (
+            <button
+              key={b}
+              type="button"
+              onClick={() => setBimestre(b)}
+              className={`h-9 w-9 rounded-lg text-sm font-bold transition-all ${
+                bimestre === b
+                  ? 'bg-primary text-white'
+                  : 'border border-border bg-surface text-text-muted hover:border-primary'
+              }`}
+            >
+              {b}º
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Aviso de permissão (Vice em modo somente leitura) */}
@@ -104,6 +138,7 @@ export default function Avaliacao() {
         <div className="space-y-4">
           {integrantes.map((integrante) => {
             const ehVoce = nomeUsuario && integrante.nome_aluno === nomeUsuario;
+            const travadoPeloProfessor = integrante.avaliacao?.alterado_por_professor ?? false;
             return (
               <Card key={integrante.id} className="p-5">
                 <div className="mb-4 flex items-center gap-3">
@@ -121,11 +156,20 @@ export default function Avaliacao() {
                   )}
                 </div>
 
+                {travadoPeloProfessor && (
+                  <div className="mb-3 flex items-center gap-2 rounded-lg border border-warning-soft bg-warning-soft px-3 py-2 text-sm font-medium text-warning">
+                    <Lock className="h-4 w-4 shrink-0" />
+                    Esta nota foi alterada pelo professor e não pode mais ser editada por aqui.
+                  </div>
+                )}
+
                 <AvaliaIntegrante
                   integranteId={integrante.id}
                   grupoId={grupo.id}
+                  bimestre={bimestre}
                   valoresIniciais={integrante.avaliacao ? deAvaliacao(integrante.avaliacao) : vazio()}
-                  podeEditar={permissao?.podeEditar ?? false}
+                  comentarioInicial={integrante.avaliacao?.comentario_esclarecimento ?? ''}
+                  podeEditar={(permissao?.podeEditar ?? false) && !travadoPeloProfessor}
                   onSalva={carregar}
                 />
               </Card>
@@ -153,19 +197,23 @@ function deAvaliacao(avaliacao) {
 }
 
 /**
- * Formulário de avaliação de um integrante (5 critérios + total + salvar).
+ * Formulário de avaliação de um integrante (5 critérios + comentário
+ * opcional + total + salvar), para um bimestre específico.
  *
  * @param {Object} props Propriedades do formulário.
  * @param {string} props.integranteId UUID do integrante.
  * @param {string} props.grupoId UUID do grupo.
+ * @param {number} props.bimestre Bimestre sendo avaliado (1 a 4).
  * @param {Object} props.valoresIniciais Valores iniciais dos critérios.
+ * @param {string} props.comentarioInicial Comentário/justificativa já salvo, se houver.
  * @param {boolean} props.podeEditar Indica se pode editar.
  * @param {Function} props.onSalva Callback após salvar.
  * @returns {JSX.Element} Formulário de avaliação.
  */
-function AvaliaIntegrante({ integranteId, grupoId, valoresIniciais, podeEditar, onSalva }) {
+function AvaliaIntegrante({ integranteId, grupoId, bimestre, valoresIniciais, comentarioInicial, podeEditar, onSalva }) {
   const { session } = useAuth();
   const [valores, setValores] = useState(valoresIniciais);
+  const [comentario, setComentario] = useState(comentarioInicial);
   const [salvando, setSalvando] = useState(false);
   const [feedback, setFeedback] = useState('');
 
@@ -174,14 +222,15 @@ function AvaliaIntegrante({ integranteId, grupoId, valoresIniciais, podeEditar, 
   const todosValidos = numeros.every((n) => Number.isFinite(n) && n >= 0 && n <= 0.2);
 
   /**
-   * Salva a avaliação do integrante.
+   * Salva a avaliação do integrante no bimestre atual.
    */
   async function salvar() {
     setSalvando(true);
     setFeedback('');
     try {
-      const corpo = {};
+      const corpo = { bimestre };
       for (const c of CRITERIOS) corpo[c.key] = Number(valores[c.key]);
+      corpo.comentario_esclarecimento = comentario.trim() || null;
       await api(`/grupos/${grupoId}/avaliacoes/${integranteId}`, {
         method: 'PUT',
         token: session?.token,
@@ -217,6 +266,18 @@ function AvaliaIntegrante({ integranteId, grupoId, valoresIniciais, podeEditar, 
           </label>
         ))}
       </div>
+
+      <label className="mt-3 block">
+        <span className="mb-1 block text-xs font-semibold text-text">Comentário (opcional)</span>
+        <textarea
+          rows={2}
+          disabled={!podeEditar}
+          value={comentario}
+          onChange={(e) => setComentario(e.target.value)}
+          placeholder="Justifique a nota, se achar necessário..."
+          className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-text placeholder:text-text-muted transition-all disabled:opacity-60 focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
+        />
+      </label>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">

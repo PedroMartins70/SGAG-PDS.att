@@ -42,11 +42,14 @@ export const obterMeuGrupo = asyncHandler(async (req, res) => {
 });
 
 /**
- * GET /api/grupos/:grupoId — Detalhe do grupo (página de expansão do professor).
+ * GET /api/grupos/:grupoId?bimestre=1 — Detalhe do grupo (página de
+ * expansão do professor), filtrado por bimestre (padrão: 1).
  */
 export const obterGrupoDetalhado = asyncHandler(async (req, res) => {
   const { grupoId } = req.params;
-  const grupo = await grupoService.obterGrupoDetalhado(grupoId);
+  const bimestreQuery = Number(req.query.bimestre);
+  const bimestre = Number.isInteger(bimestreQuery) && bimestreQuery >= 1 && bimestreQuery <= 4 ? bimestreQuery : 1;
+  const grupo = await grupoService.obterGrupoDetalhado(grupoId, bimestre);
   res.json({ grupo });
 });
 

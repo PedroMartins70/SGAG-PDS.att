@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Crown, Loader2, Pencil, Plus, Shield, Trash2, UserX } from 'lucide-react';
+import { ArrowLeft, Clock, Crown, Loader2, Pencil, Plus, Shield, Trash2, UserX } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
 import Badge from '../components/ui/Badge.jsx';
@@ -20,11 +20,15 @@ const CRITERIOS = [
   { key: 'respeito_grupo', rotulo: 'Respeito no grupo' },
 ];
 
+/** Bimestres disponíveis para seleção. */
+const BIMESTRES = [1, 2, 3, 4];
+
 const critVazio = () => Object.fromEntries(CRITERIOS.map((c) => [c.key, '']));
 
 /**
- * Página de detalhe do grupo (Professor): ver e editar avaliações, renomear o
- * grupo e gerenciar integrantes. A edição de avaliação exige justificativa.
+ * Página de detalhe do grupo (Professor): ver e editar avaliações por
+ * bimestre, renomear o grupo e gerenciar integrantes. A edição de
+ * avaliação exige justificativa.
  *
  * @returns {JSX.Element} Página de detalhe do grupo.
  */
@@ -35,6 +39,7 @@ export default function DetalheGrupo() {
   const token = session?.token;
 
   const [grupo, setGrupo] = useState(null);
+  const [bimestre, setBimestre] = useState(1);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [modal, setModal] = useState(null);
@@ -44,14 +49,14 @@ export default function DetalheGrupo() {
     setCarregando(true);
     setErro('');
     try {
-      const { grupo } = await api(`/grupos/${grupoId}`, { token });
+      const { grupo } = await api(`/grupos/${grupoId}?bimestre=${bimestre}`, { token });
       setGrupo(grupo);
     } catch (e) {
       setErro(e.message || 'Falha ao carregar o grupo.');
     } finally {
       setCarregando(false);
     }
-  }, [grupoId, token]);
+  }, [grupoId, bimestre, token]);
 
   useEffect(() => {
     carregar();
@@ -97,7 +102,7 @@ export default function DetalheGrupo() {
   }
 
   async function salvarAvaliacao() {
-    const corpo = {};
+    const corpo = { bimestre };
     for (const c of CRITERIOS) corpo[c.key] = Number(form.crit[c.key]);
     corpo.comentario_esclarecimento = form.justificativa.trim();
     await api(`/grupos/${grupoId}/avaliacoes/${modal.integranteId}`, { method: 'PUT', token, body: corpo });
@@ -139,6 +144,9 @@ export default function DetalheGrupo() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate(`/grupos/${grupoId}/historico`)}>
+              <Clock className="h-4 w-4" /> Histórico
+            </Button>
             <Button variant="outline" size="sm" onClick={() => abrirModal('renomearGrupo', { nome: grupo.nome })}>
               <Pencil className="h-4 w-4" /> Renomear
             </Button>
@@ -153,6 +161,27 @@ export default function DetalheGrupo() {
             {erro}
           </div>
         )}
+
+        {/* Seletor de bimestre */}
+        <div className="mb-4 flex items-center gap-2">
+          <span className="text-sm font-semibold text-text">Bimestre:</span>
+          <div className="flex gap-1">
+            {BIMESTRES.map((b) => (
+              <button
+                key={b}
+                type="button"
+                onClick={() => setBimestre(b)}
+                className={`h-9 w-9 rounded-lg text-sm font-bold transition-all ${
+                  bimestre === b
+                    ? 'bg-primary text-white'
+                    : 'border border-border bg-surface text-text-muted hover:border-primary'
+                }`}
+              >
+                {b}º
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Resumo: Líder, Vice, média */}
         <div className="mb-6 grid gap-3 sm:grid-cols-3">
@@ -171,7 +200,9 @@ export default function DetalheGrupo() {
             <p className="truncate text-xs text-text-muted">{grupo.vice?.email}</p>
           </Card>
           <Card className="p-4">
-            <p className="mb-1 text-xs font-bold uppercase tracking-wide text-text-muted">Média geral</p>
+            <p className="mb-1 text-xs font-bold uppercase tracking-wide text-text-muted">
+              Média do {bimestre}º bimestre
+            </p>
             <p className="font-display text-2xl font-extrabold text-primary">
               {grupo.media_geral === null ? '—' : `${grupo.media_geral.toFixed(2)} / 1,00`}
             </p>
@@ -234,7 +265,7 @@ export default function DetalheGrupo() {
       <Modal
         open={modal?.tipo === 'avaliacao'}
         onClose={() => setModal(null)}
-        title="Editar avaliação do integrante"
+        title={`Editar avaliação do integrante — ${bimestre}º bimestre`}
       >
         <AvaliacaoProfessor
           crit={form.crit}
@@ -290,7 +321,7 @@ function LinhaIntegrante({ integrante, grupo, onAvaliar, onRenomear, onExcluir }
             {av.alterado_por_professor ? ' · ajustada pelo professor' : ''}
           </p>
         ) : (
-          <p className="text-sm text-text-muted">Ainda não avaliado.</p>
+          <p className="text-sm text-text-muted">Ainda não avaliado neste bimestre.</p>
         )}
       </div>
       <div className="flex flex-wrap gap-2">

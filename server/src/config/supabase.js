@@ -26,6 +26,9 @@ function getClient() {
   }
 
   client = createClient(supabaseUrl, serviceRoleKey);
+  console.log('URL USADA:', supabaseUrl);
+  console.log('CHAVE USADA (início):', serviceRoleKey.slice(0, 25));
+  console.log('CHAVE USADA (tamanho total):', serviceRoleKey.length);
   return client;
 }
 
