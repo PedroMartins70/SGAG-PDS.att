@@ -2,20 +2,28 @@ import { createClient } from '@supabase/supabase-js';
 
 import 'dotenv/config';
 
+/**
+ * Opções que impedem o cliente de guardar/renovar sessões de usuário.
+ * Sem sessão guardada, o cliente sempre envia a chave de serviço no header
+ * Authorization e portanto sempre age como service_role.
+ */
+const OPCOES_SEM_SESSAO = {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  },
+};
+
 let client = null;
 
 /**
- * Obtém (e inicializa sob demanda) o cliente Supabase Admin usando exclusivamente
- * as variáveis de ambiente do servidor (SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY).
+ * Lê as credenciais do Supabase das variáveis de ambiente do servidor.
  *
- * A inicialização é "lazy" para permitir que a aplicação suba e rode os testes
- * sem exigir credenciais válidas, e a Service Role Key nunca é exposta ao /client.
- *
- * @returns {import('@supabase/supabase-js').SupabaseClient} Cliente Admin do Supabase.
+ * @returns {{supabaseUrl: string, serviceRoleKey: string}} Credenciais.
+ * @throws {Error} Se alguma variável estiver ausente.
  */
-function getClient() {
-  if (client) return client;
-
+function lerCredenciais() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -25,10 +33,25 @@ function getClient() {
     );
   }
 
-  client = createClient(supabaseUrl, serviceRoleKey);
-  console.log('URL USADA:', supabaseUrl);
-  console.log('CHAVE USADA (início):', serviceRoleKey.slice(0, 25));
-  console.log('CHAVE USADA (tamanho total):', serviceRoleKey.length);
+  return { supabaseUrl, serviceRoleKey };
+}
+
+/**
+ * Obtém (e inicializa sob demanda) o cliente Supabase Admin.
+ *
+ * ATENÇÃO: este cliente é compartilhado por todas as requisições. Nunca use
+ * nele métodos que criam sessão de usuário (ex.: auth.signInWithPassword),
+ * senão a sessão daquela pessoa "contamina" o cliente e as próximas
+ * escritas passam a ser feitas como usuário comum, caindo no RLS.
+ * Para login, use criarClienteAuth().
+ *
+ * @returns {import('@supabase/supabase-js').SupabaseClient} Cliente Admin do Supabase.
+ */
+function getClient() {
+  if (client) return client;
+
+  const { supabaseUrl, serviceRoleKey } = lerCredenciais();
+  client = createClient(supabaseUrl, serviceRoleKey, OPCOES_SEM_SESSAO);
   return client;
 }
 
@@ -47,3 +70,15 @@ const handler = {
 };
 
 export const supabaseAdmin = new Proxy({}, handler);
+
+/**
+ * Cria um cliente NOVO e descartável, exclusivo para operações de
+ * autenticação (login, etc.). Como é novo a cada chamada, qualquer sessão
+ * criada nele some junto com ele e nunca afeta o supabaseAdmin.
+ *
+ * @returns {import('@supabase/supabase-js').SupabaseClient} Cliente novo, sem sessão.
+ */
+export function criarClienteAuth() {
+  const { supabaseUrl, serviceRoleKey } = lerCredenciais();
+  return createClient(supabaseUrl, serviceRoleKey, OPCOES_SEM_SESSAO);
+}

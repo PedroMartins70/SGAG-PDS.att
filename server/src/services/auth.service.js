@@ -1,10 +1,15 @@
-import { supabaseAdmin } from '../config/supabase.js';
+import { supabaseAdmin, criarClienteAuth } from '../config/supabase.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import { registrarAuditoria } from '../utils/audit.js';
 
 /**
  * Autentica um usuário no Supabase Auth e retorna a sessão JWT
  * juntamente com o perfil ativo do sistema.
+ *
+ * O login usa um cliente Supabase NOVO e descartável (criarClienteAuth) para
+ * que a sessão do usuário nunca "contamine" o supabaseAdmin compartilhado.
+ * Se contaminasse, as escritas seguintes seriam feitas como usuário comum
+ * (role authenticated) e seriam bloqueadas pelo RLS.
  *
  * Mensagens de erro específicas: diferencia e-mail não cadastrado de senha incorreta.
  *
@@ -25,7 +30,8 @@ export async function login({ email, senha }) {
     throw new AppError(401, 'Nenhuma conta encontrada com esse e-mail.');
   }
 
-  const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+  const clienteAuth = criarClienteAuth();
+  const { data, error } = await clienteAuth.auth.signInWithPassword({
     email,
     password: senha,
   });

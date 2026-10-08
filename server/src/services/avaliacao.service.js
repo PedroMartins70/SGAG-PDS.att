@@ -225,8 +225,6 @@ export async function submeterAvaliacao({ grupoId, integranteId, bimestre, notas
     updated_at: new Date().toISOString(),
   };
 
-  console.log('PAYLOAD ENVIADO:', JSON.stringify(payload, null, 2));
-
   const { data, error } = await supabaseAdmin
     .from('avaliacoes')
     .upsert(payload, { onConflict: 'grupo_id,integrante_id,bimestre' })
@@ -234,8 +232,6 @@ export async function submeterAvaliacao({ grupoId, integranteId, bimestre, notas
     .single();
 
   if (error) {
-    console.error('ERRO SUPABASE:', JSON.stringify(error, null, 2));
-    console.error('USUARIO QUE TENTOU SALVAR:', JSON.stringify({ id: usuario.id, role: usuario.role }, null, 2));
     if (error.code === '23505') {
       throw new AppError(409, 'Ja existe uma avaliacao para este integrante neste bimestre');
     }
