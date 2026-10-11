@@ -4,6 +4,7 @@ import { ClipboardList, Loader2, LogOut } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
 import Badge from '../components/ui/Badge.jsx';
+import Avatar from '../components/ui/Avatar.jsx';
 import Mascot from '../components/ui/Mascot.jsx';
 import ThemeToggle from '../components/ui/ThemeToggle.jsx';
 import { api } from '../services/api.js';
@@ -107,6 +108,7 @@ export default function Dashboard() {
 
 /**
  * Visão do Professor: turmas 3A-3D, cada uma com até 5 grupos.
+ * Cada grupo mostra a logo enviada pelo líder/vice (ou a inicial do nome).
  * Clique em um grupo navega para a tela de detalhe/avaliação.
  *
  * @param {Object} props Propriedades da visão.
@@ -138,9 +140,18 @@ function VisaoProfessor({ dados }) {
                   <li
                     key={grupo.id}
                     onClick={() => navigate(`/grupos/${grupo.id}`)}
-                    className="cursor-pointer rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm font-medium text-text transition-colors hover:border-primary hover:bg-primary-soft"
+                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm font-medium text-text transition-colors hover:border-primary hover:bg-primary-soft"
                   >
-                    {grupo.nome}
+                    {grupo.logo_url ? (
+                      <img
+                        src={grupo.logo_url}
+                        alt={`Logo do grupo ${grupo.nome}`}
+                        className="h-8 w-8 shrink-0 rounded-md border border-border object-cover"
+                      />
+                    ) : (
+                      <Avatar name={grupo.nome} className="h-8 w-8 text-xs" />
+                    )}
+                    <span className="truncate">{grupo.nome}</span>
                   </li>
                 ))}
               </ul>

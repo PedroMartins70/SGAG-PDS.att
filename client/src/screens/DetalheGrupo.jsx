@@ -8,6 +8,7 @@ import Modal from '../components/ui/Modal.jsx';
 import Input from '../components/ui/Input.jsx';
 import Avatar from '../components/ui/Avatar.jsx';
 import ThemeToggle from '../components/ui/ThemeToggle.jsx';
+import ProjetoArquivos from '../components/ProjetoArquivos.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 
@@ -27,8 +28,9 @@ const critVazio = () => Object.fromEntries(CRITERIOS.map((c) => [c.key, '']));
 
 /**
  * Página de detalhe do grupo (Professor): ver e editar avaliações por
- * bimestre, renomear o grupo e gerenciar integrantes. A edição de
- * avaliação exige justificativa.
+ * bimestre, renomear o grupo, gerenciar integrantes e ver (somente leitura)
+ * os arquivos do projeto enviados pelo líder/vice. A edição de avaliação
+ * exige justificativa.
  *
  * @returns {JSX.Element} Página de detalhe do grupo.
  */
@@ -110,7 +112,7 @@ export default function DetalheGrupo() {
     await carregar();
   }
 
-  if (carregando) {
+  if (carregando && !grupo) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-canvas">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -138,6 +140,13 @@ export default function DetalheGrupo() {
             <Button variant="ghost" size="sm" onClick={() => navigate('/grupos')}>
               <ArrowLeft className="h-4 w-4" /> Voltar
             </Button>
+            {grupo.logo_url && (
+              <img
+                src={grupo.logo_url}
+                alt={`Logo do grupo ${grupo.nome}`}
+                className="h-10 w-10 shrink-0 rounded-lg border border-border object-cover"
+              />
+            )}
             <div className="leading-tight">
               <h1 className="font-display text-lg font-bold text-text">{grupo.nome}</h1>
               <p className="text-xs text-text-muted">Detalhe e avaliações do grupo</p>
@@ -233,6 +242,10 @@ export default function DetalheGrupo() {
             ))}
           </div>
         )}
+
+        {/* Arquivos do projeto (somente visualização para o professor) */}
+        <h2 className="mb-4 mt-10 font-display text-xl font-bold text-text">Arquivos do projeto</h2>
+        <ProjetoArquivos grupoId={grupoId} />
       </main>
 
       {/* Modal renomear grupo */}

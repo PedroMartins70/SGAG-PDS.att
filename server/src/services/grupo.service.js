@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import { registrarAuditoria } from '../utils/audit.js';
+import { urlsDasLogos } from './arquivo.service.js';
 
 /** Limite máximo de grupos por turma (regra de negócio). */
 export const LIMITE_GRUPOS_POR_TURMA = 5;
@@ -72,10 +73,10 @@ async function buscarPerfil(perfilId) {
 }
 
 /**
- * Lista os grupos de uma turma com líder, vice-líder e integrantes.
+ * Lista os grupos de uma turma com líder, vice-líder, integrantes e logo.
  *
  * @param {string} turmaId UUID da turma.
- * @returns {Promise<Array<Object>>} Lista de grupos.
+ * @returns {Promise<Array<Object>>} Lista de grupos (cada um com logo_url ou null).
  */
 export async function listarGruposDaTurma(turmaId) {
   await buscarTurma(turmaId);
@@ -95,7 +96,8 @@ export async function listarGruposDaTurma(turmaId) {
     throw new AppError(500, 'Falha ao listar grupos');
   }
 
-  return data;
+  const logos = await urlsDasLogos(data.map((g) => g.id));
+  return data.map((g) => ({ ...g, logo_url: logos[g.id] ?? null }));
 }
 
 /**
@@ -373,7 +375,7 @@ export async function designarViceLider({ grupoId, perfilId, professorId }) {
 
 /**
  * Obtém o detalhe completo de um grupo (página de expansão do Professor):
- * líder, vice-líder, integrantes com avaliação e média geral do grupo,
+ * líder, vice-líder, logo, integrantes com avaliação e média geral do grupo,
  * em um bimestre específico.
  *
  * @param {string} grupoId UUID do grupo.
@@ -437,6 +439,7 @@ export async function obterGrupoDetalhado(grupoId, bimestre = 1) {
     nome: grupo.nome,
     lider: grupo.lider,
     vice: grupo.vice,
+    logo_url: (await urlsDasLogos([grupo.id]))[grupo.id] ?? null,
     bimestre,
     integrantes,
     media_geral: mediaGeral === null ? null : Number(mediaGeral.toFixed(2)),

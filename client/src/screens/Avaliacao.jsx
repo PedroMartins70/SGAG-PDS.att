@@ -5,6 +5,7 @@ import Badge from '../components/ui/Badge.jsx';
 import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
 import Avatar from '../components/ui/Avatar.jsx';
+import ProjetoArquivos from '../components/ProjetoArquivos.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 
@@ -20,17 +21,24 @@ const CRITERIOS = [
 /** Bimestres disponíveis para seleção. */
 const BIMESTRES = [1, 2, 3, 4];
 
+/** Abas da tela. */
+const ABAS = [
+  { key: 'avaliacoes', rotulo: 'Avaliações' },
+  { key: 'arquivos', rotulo: 'Arquivos do projeto' },
+];
+
 /** Valores vazios padrão para cada critério. */
 const vazio = () => Object.fromEntries(CRITERIOS.map((c) => [c.key, '']));
 
 /**
- * Tela de avaliação do Líder/Vice-Líder sobre o seu grupo, por bimestre.
- * O Líder/Vice avalia cada integrante (inclusive a si mesmo) nos 5 critérios,
- * cuja soma gera uma nota de no máximo 1,00, podendo justificar a nota com
- * um comentário opcional. Uma avaliação já alterada pelo professor fica
- * travada para o Líder/Vice-Líder.
+ * Tela do Líder/Vice-Líder sobre o seu grupo, com duas abas:
+ * - Avaliações: avalia cada integrante por bimestre (5 critérios, nota máxima
+ *   1,00, comentário opcional). Uma avaliação já alterada pelo professor fica
+ *   travada para o Líder/Vice-Líder.
+ * - Arquivos do projeto: envio do trabalho escrito (PDF), do pitch (vídeo) e
+ *   da logo, com o botão "Salvar alterações".
  *
- * @returns {JSX.Element} Tela de avaliação.
+ * @returns {JSX.Element} Tela do líder/vice.
  */
 export default function Avaliacao() {
   const { session } = useAuth();
@@ -38,6 +46,7 @@ export default function Avaliacao() {
   const token = session?.token;
   const nomeUsuario = session?.user?.nome || '';
 
+  const [aba, setAba] = useState('avaliacoes');
   const [grupo, setGrupo] = useState(null);
   const [bimestre, setBimestre] = useState(1);
   const [integrantes, setIntegrantes] = useState([]);
@@ -66,7 +75,7 @@ export default function Avaliacao() {
     carregar();
   }, [carregar]);
 
-  if (carregando) {
+  if (carregando && !grupo) {
     return (
       <div className="flex justify-center py-16">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -95,87 +104,110 @@ export default function Avaliacao() {
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <p className="text-sm text-text-muted">Avalie cada integrante de 0,00 a 0,20 por critério.</p>
-          <Button variant="outline" size="sm" onClick={() => navigate(`/grupos/${grupo.id}/historico`)}>
-            <Clock className="h-4 w-4" /> Histórico
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" onClick={() => navigate(`/grupos/${grupo.id}/historico`)}>
+          <Clock className="h-4 w-4" /> Histórico
+        </Button>
       </div>
 
-      {/* Seletor de bimestre */}
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-semibold text-text">Bimestre:</span>
-        <div className="flex gap-1">
-          {BIMESTRES.map((b) => (
-            <button
-              key={b}
-              type="button"
-              onClick={() => setBimestre(b)}
-              className={`h-9 w-9 rounded-lg text-sm font-bold transition-all ${
-                bimestre === b
-                  ? 'bg-primary text-white'
-                  : 'border border-border bg-surface text-text-muted hover:border-primary'
-              }`}
-            >
-              {b}º
-            </button>
-          ))}
-        </div>
+      {/* Abas */}
+      <div className="flex gap-2 border-b border-border">
+        {ABAS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => setAba(item.key)}
+            className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
+              aba === item.key
+                ? 'border-primary text-primary'
+                : 'border-transparent text-text-muted hover:text-text'
+            }`}
+          >
+            {item.rotulo}
+          </button>
+        ))}
       </div>
 
-      {/* Aviso de permissão (Vice em modo somente leitura) */}
-      {permissao && !permissao.podeEditar && (
-        <div className="rounded-lg border border-warning-soft bg-warning-soft px-3 py-2 text-sm font-medium text-warning">
-          {permissao.motivo || 'Modo somente leitura.'}
-        </div>
-      )}
-
-      {/* Lista de avaliação */}
-      {integrantes.length === 0 ? (
-        <Card className="p-8 text-center text-text-muted">Nenhum integrante no grupo.</Card>
+      {aba === 'arquivos' ? (
+        <ProjetoArquivos grupoId={grupo.id} />
       ) : (
-        <div className="space-y-4">
-          {integrantes.map((integrante) => {
-            const ehVoce = nomeUsuario && integrante.nome_aluno === nomeUsuario;
-            const travadoPeloProfessor = integrante.avaliacao?.alterado_por_professor ?? false;
-            return (
-              <Card key={integrante.id} className="p-5">
-                <div className="mb-4 flex items-center gap-3">
-                  <Avatar name={integrante.nome_aluno} />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-text">
-                      {integrante.nome_aluno}
-                      {ehVoce && <span className="text-primary"> (você)</span>}
-                    </p>
-                  </div>
-                  {integrante.avaliacao && (
-                    <span className="rounded-full bg-success-soft px-3 py-1 text-xs font-bold text-success">
-                      Salva · {Number(integrante.avaliacao.nota_total).toFixed(2)}
-                    </span>
-                  )}
-                </div>
+        <>
+          <p className="text-sm text-text-muted">Avalie cada integrante de 0,00 a 0,20 por critério.</p>
 
-                {travadoPeloProfessor && (
-                  <div className="mb-3 flex items-center gap-2 rounded-lg border border-warning-soft bg-warning-soft px-3 py-2 text-sm font-medium text-warning">
-                    <Lock className="h-4 w-4 shrink-0" />
-                    Esta nota foi alterada pelo professor e não pode mais ser editada por aqui.
-                  </div>
-                )}
+          {/* Seletor de bimestre */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-text">Bimestre:</span>
+            <div className="flex gap-1">
+              {BIMESTRES.map((b) => (
+                <button
+                  key={b}
+                  type="button"
+                  onClick={() => setBimestre(b)}
+                  className={`h-9 w-9 rounded-lg text-sm font-bold transition-all ${
+                    bimestre === b
+                      ? 'bg-primary text-white'
+                      : 'border border-border bg-surface text-text-muted hover:border-primary'
+                  }`}
+                >
+                  {b}º
+                </button>
+              ))}
+            </div>
+          </div>
 
-                <AvaliaIntegrante
-                  integranteId={integrante.id}
-                  grupoId={grupo.id}
-                  bimestre={bimestre}
-                  valoresIniciais={integrante.avaliacao ? deAvaliacao(integrante.avaliacao) : vazio()}
-                  comentarioInicial={integrante.avaliacao?.comentario_esclarecimento ?? ''}
-                  podeEditar={(permissao?.podeEditar ?? false) && !travadoPeloProfessor}
-                  onSalva={carregar}
-                />
-              </Card>
-            );
-          })}
-        </div>
+          {/* Aviso de permissão (Vice em modo somente leitura) */}
+          {permissao && !permissao.podeEditar && (
+            <div className="rounded-lg border border-warning-soft bg-warning-soft px-3 py-2 text-sm font-medium text-warning">
+              {permissao.motivo || 'Modo somente leitura.'}
+            </div>
+          )}
+
+          {/* Lista de avaliação */}
+          {integrantes.length === 0 ? (
+            <Card className="p-8 text-center text-text-muted">Nenhum integrante no grupo.</Card>
+          ) : (
+            <div className="space-y-4">
+              {integrantes.map((integrante) => {
+                const ehVoce = nomeUsuario && integrante.nome_aluno === nomeUsuario;
+                const travadoPeloProfessor = integrante.avaliacao?.alterado_por_professor ?? false;
+                return (
+                  <Card key={integrante.id} className="p-5">
+                    <div className="mb-4 flex items-center gap-3">
+                      <Avatar name={integrante.nome_aluno} />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-text">
+                          {integrante.nome_aluno}
+                          {ehVoce && <span className="text-primary"> (você)</span>}
+                        </p>
+                      </div>
+                      {integrante.avaliacao && (
+                        <span className="rounded-full bg-success-soft px-3 py-1 text-xs font-bold text-success">
+                          Salva · {Number(integrante.avaliacao.nota_total).toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+
+                    {travadoPeloProfessor && (
+                      <div className="mb-3 flex items-center gap-2 rounded-lg border border-warning-soft bg-warning-soft px-3 py-2 text-sm font-medium text-warning">
+                        <Lock className="h-4 w-4 shrink-0" />
+                        Esta nota foi alterada pelo professor e não pode mais ser editada por aqui.
+                      </div>
+                    )}
+
+                    <AvaliaIntegrante
+                      integranteId={integrante.id}
+                      grupoId={grupo.id}
+                      bimestre={bimestre}
+                      valoresIniciais={integrante.avaliacao ? deAvaliacao(integrante.avaliacao) : vazio()}
+                      comentarioInicial={integrante.avaliacao?.comentario_esclarecimento ?? ''}
+                      podeEditar={(permissao?.podeEditar ?? false) && !travadoPeloProfessor}
+                      onSalva={carregar}
+                    />
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
