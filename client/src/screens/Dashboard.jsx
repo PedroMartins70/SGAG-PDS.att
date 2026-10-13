@@ -13,8 +13,9 @@ import Avaliacao from './Avaliacao.jsx';
 
 /**
  * Painel principal.
- * Para o Professor, mostra as turmas (3A-3D) com até 5 grupos cada.
- * Para Líder/Vice-Líder, mostra a avaliação do próprio grupo.
+ * - Professor: turmas (3A-3D) com até 5 grupos cada, com gestão e avaliação.
+ * - Avaliador da banca: as mesmas turmas e grupos, em modo consulta.
+ * - Líder/Vice-Líder: avaliação e arquivos do próprio grupo.
  *
  * @returns {JSX.Element} Painel principal.
  */
@@ -27,12 +28,13 @@ export default function Dashboard() {
 
   const token = session?.token;
   const role = session?.user?.role;
+  const verTurmas = role === 'professor' || role === 'avaliador';
 
   useEffect(() => {
-    if (role !== 'professor') return;
+    if (!verTurmas) return;
 
     let ativo = true;
-    async function carregarProfessor() {
+    async function carregarTurmas() {
       setCarregando(true);
       setErro('');
       try {
@@ -49,16 +51,19 @@ export default function Dashboard() {
         if (ativo) setCarregando(false);
       }
     }
-    carregarProfessor();
+    carregarTurmas();
     return () => {
       ativo = false;
     };
-  }, [role, token]);
+  }, [verTurmas, token]);
 
   function sair() {
     logout();
     navigate('/login');
   }
+
+  const titulo =
+    role === 'professor' ? 'Painel do Professor' : role === 'avaliador' ? 'Painel do Avaliador' : 'Avaliação do Grupo';
 
   return (
     <div className="min-h-screen bg-canvas">
@@ -67,9 +72,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <Mascot className="h-9 w-9" />
             <div className="leading-tight">
-              <h1 className="font-display text-lg font-bold text-text">
-                {role === 'professor' ? 'Painel do Professor' : 'Avaliação do Grupo'}
-              </h1>
+              <h1 className="font-display text-lg font-bold text-text">{titulo}</h1>
               <p className="text-xs text-text-muted">{session?.user?.nome}</p>
             </div>
           </div>
@@ -88,7 +91,7 @@ export default function Dashboard() {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-        {role === 'professor' ? (
+        {verTurmas ? (
           carregando ? (
             <div className="flex justify-center py-16">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -96,7 +99,7 @@ export default function Dashboard() {
           ) : erro ? (
             <Card className="p-8 text-center text-danger">{erro}</Card>
           ) : (
-            <VisaoProfessor dados={dados} />
+            <VisaoTurmas dados={dados} avaliador={role === 'avaliador'} />
           )
         ) : (
           <Avaliacao />
@@ -107,22 +110,27 @@ export default function Dashboard() {
 }
 
 /**
- * Visão do Professor: turmas 3A-3D, cada uma com até 5 grupos.
- * Cada grupo mostra a logo enviada pelo líder/vice (ou a inicial do nome).
- * Clique em um grupo navega para a tela de detalhe/avaliação.
+ * Visão de turmas 3A-3D, cada uma com até 5 grupos. Cada grupo mostra a logo
+ * enviada pelo líder/vice (ou a inicial do nome). O clique leva à tela de
+ * detalhe do professor ou à tela de consulta do avaliador.
  *
  * @param {Object} props Propriedades da visão.
  * @param {Object} props.dados Dados carregados (turmas e grupos por turma).
+ * @param {boolean} props.avaliador true se quem está vendo é o avaliador da banca.
  * @returns {JSX.Element} Grade de turmas.
  */
-function VisaoProfessor({ dados }) {
+function VisaoTurmas({ dados, avaliador }) {
   const navigate = useNavigate();
   const turmas = dados?.turmas ?? [];
 
   return (
     <div>
       <h2 className="mb-1 font-display text-2xl font-bold text-text">Turmas</h2>
-      <p className="mb-6 text-text-muted">Clique em um grupo para ver detalhes e avaliações.</p>
+      <p className="mb-6 text-text-muted">
+        {avaliador
+          ? 'Clique em um grupo para ver as notas, os arquivos e o histórico.'
+          : 'Clique em um grupo para ver detalhes e avaliações.'}
+      </p>
       <div className="grid gap-5 sm:grid-cols-2">
         {turmas.map((turma) => {
           const grupos = dados?.gruposPorTurma?.[turma.id] ?? [];
@@ -139,7 +147,7 @@ function VisaoProfessor({ dados }) {
                 {grupos.map((grupo) => (
                   <li
                     key={grupo.id}
-                    onClick={() => navigate(`/grupos/${grupo.id}`)}
+                    onClick={() => navigate(avaliador ? `/avaliador/grupos/${grupo.id}` : `/grupos/${grupo.id}`)}
                     className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm font-medium text-text transition-colors hover:border-primary hover:bg-primary-soft"
                   >
                     {grupo.logo_url ? (

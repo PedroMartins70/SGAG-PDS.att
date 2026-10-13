@@ -8,6 +8,7 @@ import Grupos from './screens/Grupos.jsx';
 import NovoGrupo from './screens/NovoGrupo.jsx';
 import DetalheGrupo from './screens/DetalheGrupo.jsx';
 import Historico from './screens/Historico.jsx';
+import AvaliadorGrupo from './screens/AvaliadorGrupo.jsx';
 
 /**
  * Guarda de rota: exige sessão autenticada; caso contrário redireciona ao login.
@@ -37,6 +38,24 @@ function RequireProfessor({ children }) {
     return <Navigate to="/login" replace />;
   }
   if (session.user.role !== 'professor') {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return children;
+}
+
+/**
+ * Guarda de rota: apenas Avaliador da banca.
+ *
+ * @param {Object} props Propriedades do guarda.
+ * @param {React.ReactNode} props.children Conteúdo restrito ao avaliador.
+ * @returns {JSX.Element} Conteúdo ou redirecionamento.
+ */
+function RequireAvaliador({ children }) {
+  const { session } = useAuth();
+  if (!session) {
+    return <Navigate to="/login" replace />;
+  }
+  if (session.user.role !== 'avaliador') {
     return <Navigate to="/dashboard" replace />;
   }
   return children;
@@ -93,6 +112,14 @@ export default function App() {
               <RequireAuth>
                 <Historico />
               </RequireAuth>
+            }
+          />
+          <Route
+            path="/avaliador/grupos/:grupoId"
+            element={
+              <RequireAvaliador>
+                <AvaliadorGrupo />
+              </RequireAvaliador>
             }
           />
           <Route path="/" element={<Navigate to="/login" replace />} />

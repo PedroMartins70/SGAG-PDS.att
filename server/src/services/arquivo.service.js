@@ -370,7 +370,7 @@ export async function listarArquivos({ grupoId, usuario }) {
   const grupo = await buscarGrupo(grupoId);
   const lideranca = ehLiderancaDoGrupo(grupo, usuario);
 
-  if (usuario.role !== 'professor' && !lideranca) {
+  if (usuario.role !== 'professor' && usuario.role !== 'avaliador' && !lideranca) {
     throw new AppError(403, 'Sem permissao para ver os arquivos deste grupo');
   }
 

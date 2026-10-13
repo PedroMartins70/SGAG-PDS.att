@@ -252,7 +252,7 @@ export default function Grupos() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={abrirPerfilModal}>
-              <UserPlus className="h-4 w-4" /> Cadastrar Líder / Vice
+              <UserPlus className="h-4 w-4" /> Cadastrar Líder / Vice / Avaliador
             </Button>
             <Button
               variant="success"
@@ -361,7 +361,7 @@ export default function Grupos() {
         </Button>
       </Modal>
 
-      <Modal open={modal?.tipo === 'perfil'} onClose={() => setModal(null)} title="Cadastrar Líder / Vice-Líder">
+      <Modal open={modal?.tipo === 'perfil'} onClose={() => setModal(null)} title="Cadastrar Líder, Vice-Líder ou Avaliador">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -395,10 +395,11 @@ export default function Grupos() {
           />
           <div>
             <span className="mb-1.5 block text-sm font-semibold text-text">Papel</span>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {[
                 { valor: 'lider', rotulo: 'Líder' },
                 { valor: 'vice_lider', rotulo: 'Vice-Líder' },
+                { valor: 'avaliador', rotulo: 'Avaliador' },
               ].map((opcao) => (
                 <button
                   key={opcao.valor}

@@ -21,7 +21,7 @@ router.get('/turmas/:turmaId/grupos', requireAuth, listarGrupos);
 // Importante: '/grupos/me' deve vir antes de '/grupos/:grupoId'
 router.get('/grupos/me', requireAuth, requireRoles('lider', 'vice_lider'), obterMeuGrupo);
 router.post('/grupos/novo', requireAuth, requireRoles('professor'), criarGrupoCompleto);
-router.get('/grupos/:grupoId', requireAuth, requireRoles('professor'), obterGrupoDetalhado);
+router.get('/grupos/:grupoId', requireAuth, requireRoles('professor', 'avaliador'), obterGrupoDetalhado);
 router.post('/turmas/:turmaId/grupos', requireAuth, requireRoles('professor'), criarGrupo);
 router.put('/grupos/:grupoId', requireAuth, requireRoles('professor'), renomearGrupo);
 router.delete('/grupos/:grupoId', requireAuth, requireRoles('professor'), excluirGrupo);

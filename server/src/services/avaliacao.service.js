@@ -321,10 +321,11 @@ export async function listarHistorico(grupoId, usuario) {
   const grupo = await buscarGrupo(grupoId);
 
   const ehProfessor = usuario.role === 'professor';
+  const ehAvaliador = usuario.role === 'avaliador';
   const ehLider = usuario.id === grupo.lider_id;
   const ehViceLider = usuario.id === grupo.vice_lider_id;
 
-  if (!ehProfessor && !ehLider && !ehViceLider) {
+  if (!ehProfessor && !ehAvaliador && !ehLider && !ehViceLider) {
     throw new AppError(403, 'Sem permissao para consultar o historico deste grupo');
   }
 

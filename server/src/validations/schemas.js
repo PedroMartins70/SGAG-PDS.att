@@ -70,8 +70,8 @@ export const criarPerfilSchema = z.object({
   nome: z.string().min(3, 'O nome deve ter no minimo 3 caracteres').max(255),
   email: z.string().email('E-mail invalido'),
   senha: z.string().min(6, 'A senha deve ter no minimo 6 caracteres'),
-  role: z.enum(['lider', 'vice_lider'], {
-    errorMap: () => ({ message: 'Somente os perfis lider e vice_lider podem ser cadastrados pelo professor' }),
+    role: z.enum(['lider', 'vice_lider', 'avaliador'], {
+    errorMap: () => ({ message: 'Somente os perfis lider, vice_lider e avaliador podem ser cadastrados pelo professor' }),
   }),
 });
 
