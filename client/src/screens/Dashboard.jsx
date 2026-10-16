@@ -6,6 +6,7 @@ import Card from '../components/ui/Card.jsx';
 import Badge from '../components/ui/Badge.jsx';
 import Avatar from '../components/ui/Avatar.jsx';
 import Mascot from '../components/ui/Mascot.jsx';
+import LogoEscola from '../components/LogoEscola.jsx';
 import ThemeToggle from '../components/ui/ThemeToggle.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
@@ -70,6 +71,7 @@ export default function Dashboard() {
       <header className="sticky top-0 z-10 border-b border-border bg-surface/80 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">
+                        <LogoEscola />
             <Mascot className="h-9 w-9" />
             <div className="leading-tight">
               <h1 className="font-display text-lg font-bold text-text">{titulo}</h1>
