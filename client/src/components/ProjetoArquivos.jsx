@@ -8,7 +8,14 @@ import { getSupabase } from '../lib/supabaseClient.js';
 
 const MB = 1024 * 1024;
 
-/** Tipos de arquivo do projeto, na ordem em que aparecem na tela. */
+/** Bimestres disponíveis para seleção. */
+const BIMESTRES = [1, 2, 3, 4];
+
+/**
+ * Tipos de arquivo do projeto, na ordem em que aparecem na tela.
+ * porBimestre: true  -> um arquivo por bimestre (trabalho e pitch).
+ * porBimestre: false -> um único arquivo para o projeto todo (logo).
+ */
 const TIPOS = [
   {
     key: 'trabalho',
@@ -18,6 +25,7 @@ const TIPOS = [
     accept: 'application/pdf,.pdf',
     extensoes: ['pdf'],
     limite: 10 * MB,
+    porBimestre: true,
   },
   {
     key: 'pitch',
@@ -27,15 +35,17 @@ const TIPOS = [
     accept: 'video/*,.mp4,.mov,.m4v,.avi,.mkv,.webm,.3gp,.wmv',
     extensoes: ['mp4', 'mov', 'm4v', 'avi', 'mkv', 'webm', '3gp', 'wmv'],
     limite: 30 * MB,
+    porBimestre: true,
   },
   {
     key: 'logo',
-    rotulo: 'Logo',
-    dica: 'Imagem PNG, JPG ou WEBP de até 5 MB.',
+    rotulo: 'Logo do projeto',
+    dica: 'Imagem PNG, JPG ou WEBP de até 5 MB. A logo vale para o projeto todo, não muda por bimestre.',
     icone: ImageIcon,
     accept: 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp',
     extensoes: ['png', 'jpg', 'jpeg', 'webp'],
     limite: 5 * MB,
+    porBimestre: false,
   },
 ];
 
@@ -76,10 +86,11 @@ function linkPareceValido(texto) {
 }
 
 /**
- * Seção "Arquivos do projeto" de um grupo (trabalho escrito, pitch e logo).
- * O pitch pode ser um arquivo de vídeo ou um link do YouTube/Google Drive.
+ * Seção "Arquivos do projeto" de um grupo. O trabalho escrito e o pitch são
+ * enviados por bimestre (o pitch pode ser arquivo de vídeo ou link do
+ * YouTube/Google Drive); a logo é uma só para o projeto todo.
  * O servidor diz se o usuário pode enviar (líder/vice do grupo). Para os
- * demais (professor), a tela só mostra o que foi enviado, sem controles.
+ * demais (professor, avaliador), a tela só mostra o que foi enviado.
  *
  * @param {Object} props Propriedades.
  * @param {string} props.grupoId UUID do grupo.
@@ -89,6 +100,7 @@ export default function ProjetoArquivos({ grupoId }) {
   const { session } = useAuth();
   const token = session?.token;
 
+  const [bimestre, setBimestre] = useState(1);
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
@@ -103,16 +115,17 @@ export default function ProjetoArquivos({ grupoId }) {
   const carregar = useCallback(async () => {
     setErro('');
     try {
-      const resposta = await api(`/grupos/${grupoId}/arquivos`, { token });
+      const resposta = await api(`/grupos/${grupoId}/arquivos?bimestre=${bimestre}`, { token });
       setDados(resposta);
     } catch (e) {
       setErro(e.message || 'Falha ao carregar os arquivos.');
     } finally {
       setCarregando(false);
     }
-  }, [grupoId, token]);
+  }, [grupoId, bimestre, token]);
 
   useEffect(() => {
+    setCarregando(true);
     carregar();
   }, [carregar]);
 
@@ -127,6 +140,24 @@ export default function ProjetoArquivos({ grupoId }) {
     },
     [previaLogo]
   );
+
+  const haPendenteDoBimestre = Boolean(pendentes.trabalho || pendentes.pitch || linkPitch.trim());
+
+  /** Troca o bimestre exibido (bloqueia se houver arquivo escolhido e ainda não salvo). */
+  function trocarBimestre(novo) {
+    if (novo === bimestre) return;
+    if (haPendenteDoBimestre) {
+      setResultado({
+        ok: false,
+        texto: 'Salve ou descarte o trabalho e o pitch escolhidos antes de trocar de bimestre.',
+      });
+      return;
+    }
+    setResultado(null);
+    setErrosTipo({});
+    setModoPitch('arquivo');
+    setBimestre(novo);
+  }
 
   /** Valida e guarda o arquivo escolhido (ainda sem enviar). */
   function escolher(cfg, evento) {
@@ -146,9 +177,10 @@ export default function ProjetoArquivos({ grupoId }) {
     }
 
     if (arquivo.size > cfg.limite) {
+      const sugestao = cfg.key === 'pitch' ? ' Se o vídeo for maior, use a opção "Colar link".' : '';
       setErrosTipo((atual) => ({
         ...atual,
-        [cfg.key]: `O arquivo tem ${formatarTamanho(arquivo.size)} e o limite é ${cfg.limite / MB} MB. Se o vídeo for maior, use a opção "Colar link".`,
+        [cfg.key]: `O arquivo tem ${formatarTamanho(arquivo.size)} e o limite é ${cfg.limite / MB} MB.${sugestao}`,
       }));
       return;
     }
@@ -186,6 +218,7 @@ export default function ProjetoArquivos({ grupoId }) {
       const arquivo = pendentes[tipo];
       if (!arquivo) continue;
       const cfg = TIPOS.find((t) => t.key === tipo);
+      const bimestreDoArquivo = cfg.porBimestre ? bimestre : 0;
 
       try {
         setEnviando((atual) => ({ ...atual, [tipo]: true }));
@@ -193,7 +226,7 @@ export default function ProjetoArquivos({ grupoId }) {
         const preparo = await api(`/grupos/${grupoId}/arquivos/${tipo}/upload-url`, {
           method: 'POST',
           token,
-          body: { nome: arquivo.name, tamanho: arquivo.size },
+          body: { nome: arquivo.name, tamanho: arquivo.size, bimestre: bimestreDoArquivo },
         });
 
         const conteudo = arquivo.slice(0, arquivo.size, preparo.mime);
@@ -206,7 +239,7 @@ export default function ProjetoArquivos({ grupoId }) {
         await api(`/grupos/${grupoId}/arquivos/${tipo}/confirmar`, {
           method: 'POST',
           token,
-          body: { caminho: preparo.caminho, nome: arquivo.name },
+          body: { caminho: preparo.caminho, nome: arquivo.name, bimestre: bimestreDoArquivo },
         });
 
         descartar(tipo);
@@ -226,7 +259,7 @@ export default function ProjetoArquivos({ grupoId }) {
           await api(`/grupos/${grupoId}/arquivos/pitch/link`, {
             method: 'PUT',
             token,
-            body: { url: linkPitch.trim() },
+            body: { url: linkPitch.trim(), bimestre },
           });
           setLinkPitch('');
           setModoPitch('arquivo');
@@ -247,156 +280,188 @@ export default function ProjetoArquivos({ grupoId }) {
     );
   }
 
-  if (carregando) {
-    return (
-      <div className="flex justify-center py-10">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (erro || !dados) {
-    return <Card className="p-6 text-center text-danger">{erro || 'Não foi possível carregar os arquivos.'}</Card>;
-  }
-
-  const podeEnviar = dados.pode_enviar;
+  const podeEnviar = Boolean(dados?.pode_enviar);
   const haPendentes = Object.keys(pendentes).length > 0 || (modoPitch === 'link' && linkPitch.trim().length > 0);
 
   return (
     <div className="space-y-4">
-      {TIPOS.map((cfg) => {
-        const Icone = cfg.icone;
-        const atual = dados.arquivos?.[cfg.key] ?? null;
-        const pendente = pendentes[cfg.key];
-        const modoLink = cfg.key === 'pitch' && modoPitch === 'link';
+      {/* Seletor de bimestre (vale para o trabalho escrito e o pitch) */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-semibold text-text">Bimestre:</span>
+        <div className="flex gap-1">
+          {BIMESTRES.map((b) => (
+            <button
+              key={b}
+              type="button"
+              disabled={salvando}
+              onClick={() => trocarBimestre(b)}
+              className={`h-9 w-9 rounded-lg text-sm font-bold transition-all ${
+                bimestre === b
+                  ? 'bg-primary text-white'
+                  : 'border border-border bg-surface text-text-muted hover:border-primary'
+              }`}
+            >
+              {b}º
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-text-muted">O trabalho escrito e o pitch são enviados por bimestre.</span>
+      </div>
 
-        return (
-          <Card key={cfg.key} className="p-5">
-            <div className="mb-3 flex items-center gap-2">
-              <Icone className="h-5 w-5 text-primary" />
-              <h3 className="font-display text-lg font-bold text-text">{cfg.rotulo}</h3>
-            </div>
+      {carregando ? (
+        <div className="flex justify-center py-10">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      ) : erro || !dados ? (
+        <Card className="p-6 text-center text-danger">{erro || 'Não foi possível carregar os arquivos.'}</Card>
+      ) : (
+        <>
+          {TIPOS.map((cfg) => {
+            const Icone = cfg.icone;
+            const atual = dados.arquivos?.[cfg.key] ?? null;
+            const pendente = pendentes[cfg.key];
+            const modoLink = cfg.key === 'pitch' && modoPitch === 'link';
 
-            <ArquivoAtual tipo={cfg.key} atual={atual} />
+            return (
+              <Card key={cfg.key} className="p-5">
+                <div className="mb-3 flex items-center gap-2">
+                  <Icone className="h-5 w-5 text-primary" />
+                  <h3 className="font-display text-lg font-bold text-text">
+                    {cfg.rotulo}
+                    {cfg.porBimestre ? ` — ${bimestre}º bimestre` : ''}
+                  </h3>
+                </div>
 
-            {podeEnviar && (
-              <div className="mt-4 border-t border-border pt-4">
-                {cfg.key === 'pitch' && (
-                  <div className="mb-3 inline-flex rounded-xl border border-border bg-surface p-1">
-                    {[
-                      { modo: 'arquivo', rotulo: 'Enviar arquivo' },
-                      { modo: 'link', rotulo: 'Colar link' },
-                    ].map((opcao) => (
-                      <button
-                        key={opcao.modo}
-                        type="button"
-                        disabled={salvando}
-                        onClick={() => trocarModoPitch(opcao.modo)}
-                        className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
-                          modoPitch === opcao.modo
-                            ? 'bg-primary text-white'
-                            : 'text-text-muted hover:text-text'
-                        }`}
-                      >
-                        {opcao.rotulo}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <ArquivoAtual tipo={cfg.key} atual={atual} />
 
-                {modoLink ? (
-                  <div>
-                    <p className="mb-2 text-xs text-text-muted">
-                      Cole o link de um vídeo do YouTube (de preferência como "não listado") ou de um arquivo do Google
-                      Drive com o compartilhamento em "Qualquer pessoa com o link". Serve para vídeos grandes.
-                    </p>
-                    <input
-                      type="url"
-                      inputMode="url"
-                      placeholder="https://www.youtube.com/watch?v=..."
-                      value={linkPitch}
-                      disabled={salvando}
-                      onChange={(e) => {
-                        setLinkPitch(e.target.value);
-                        setResultado(null);
-                      }}
-                      className="h-11 w-full rounded-xl border border-border bg-surface px-3 text-base text-text placeholder:text-text-muted transition-all focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
-                    />
-                    {enviando.pitch && (
-                      <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-primary">
-                        <Loader2 className="h-4 w-4 animate-spin" /> Salvando link...
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    <p className="mb-2 text-xs text-text-muted">{cfg.dica}</p>
-
-                    {pendente && (
-                      <div className="mb-3 flex items-center gap-3 rounded-lg border border-dashed border-primary bg-primary-soft px-3 py-2">
-                        {cfg.key === 'logo' && previaLogo && (
-                          <img src={previaLogo} alt="Prévia da logo" className="h-12 w-12 rounded-md object-cover" />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-text">{pendente.name}</p>
-                          <p className="text-xs text-text-muted">
-                            {formatarTamanho(pendente.size)} · será enviado ao clicar em "Salvar alterações"
-                          </p>
-                        </div>
-                        {enviando[cfg.key] ? (
-                          <span className="flex items-center gap-1 text-xs font-semibold text-primary">
-                            <Loader2 className="h-4 w-4 animate-spin" /> Enviando...
-                          </span>
-                        ) : (
+                {podeEnviar && (
+                  <div className="mt-4 border-t border-border pt-4">
+                    {cfg.key === 'pitch' && (
+                      <div className="mb-3 inline-flex rounded-xl border border-border bg-surface p-1">
+                        {[
+                          { modo: 'arquivo', rotulo: 'Enviar arquivo' },
+                          { modo: 'link', rotulo: 'Colar link' },
+                        ].map((opcao) => (
                           <button
+                            key={opcao.modo}
                             type="button"
-                            aria-label="Descartar arquivo escolhido"
                             disabled={salvando}
-                            onClick={() => descartar(cfg.key)}
-                            className="text-text-muted transition-colors hover:text-danger"
+                            onClick={() => trocarModoPitch(opcao.modo)}
+                            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
+                              modoPitch === opcao.modo
+                                ? 'bg-primary text-white'
+                                : 'text-text-muted hover:text-text'
+                            }`}
                           >
-                            <X className="h-4 w-4" />
+                            {opcao.rotulo}
                           </button>
-                        )}
+                        ))}
                       </div>
                     )}
 
-                    <label className={`${estiloBotaoLink} cursor-pointer ${salvando ? 'pointer-events-none opacity-60' : ''}`}>
-                      <Upload className="h-4 w-4" />
-                      {atual || pendente ? 'Trocar arquivo' : 'Escolher arquivo'}
-                      <input
-                        type="file"
-                        accept={cfg.accept}
-                        className="hidden"
-                        disabled={salvando}
-                        onChange={(e) => escolher(cfg, e)}
-                      />
-                    </label>
-                  </>
+                    {modoLink ? (
+                      <div>
+                        <p className="mb-2 text-xs text-text-muted">
+                          Cole o link de um vídeo do YouTube (de preferência como "não listado") ou de um arquivo do
+                          Google Drive com o compartilhamento em "Qualquer pessoa com o link". Serve para vídeos
+                          grandes.
+                        </p>
+                        <input
+                          type="url"
+                          inputMode="url"
+                          placeholder="https://www.youtube.com/watch?v=..."
+                          value={linkPitch}
+                          disabled={salvando}
+                          onChange={(e) => {
+                            setLinkPitch(e.target.value);
+                            setResultado(null);
+                          }}
+                          className="h-11 w-full rounded-xl border border-border bg-surface px-3 text-base text-text placeholder:text-text-muted transition-all focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
+                        />
+                        {enviando.pitch && (
+                          <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-primary">
+                            <Loader2 className="h-4 w-4 animate-spin" /> Salvando link...
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <p className="mb-2 text-xs text-text-muted">{cfg.dica}</p>
+
+                        {pendente && (
+                          <div className="mb-3 flex items-center gap-3 rounded-lg border border-dashed border-primary bg-primary-soft px-3 py-2">
+                            {cfg.key === 'logo' && previaLogo && (
+                              <img src={previaLogo} alt="Prévia da logo" className="h-12 w-12 rounded-md object-cover" />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold text-text">{pendente.name}</p>
+                              <p className="text-xs text-text-muted">
+                                {formatarTamanho(pendente.size)} · será enviado ao clicar em "Salvar alterações"
+                              </p>
+                            </div>
+                            {enviando[cfg.key] ? (
+                              <span className="flex items-center gap-1 text-xs font-semibold text-primary">
+                                <Loader2 className="h-4 w-4 animate-spin" /> Enviando...
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                aria-label="Descartar arquivo escolhido"
+                                disabled={salvando}
+                                onClick={() => descartar(cfg.key)}
+                                className="text-text-muted transition-colors hover:text-danger"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        <label
+                          className={`${estiloBotaoLink} cursor-pointer ${salvando ? 'pointer-events-none opacity-60' : ''}`}
+                        >
+                          <Upload className="h-4 w-4" />
+                          {atual || pendente ? 'Trocar arquivo' : 'Escolher arquivo'}
+                          <input
+                            type="file"
+                            accept={cfg.accept}
+                            className="hidden"
+                            disabled={salvando}
+                            onChange={(e) => escolher(cfg, e)}
+                          />
+                        </label>
+                      </>
+                    )}
+
+                    {errosTipo[cfg.key] && (
+                      <p className="mt-2 text-sm font-medium text-danger">{errosTipo[cfg.key]}</p>
+                    )}
+                  </div>
                 )}
+              </Card>
+            );
+          })}
 
-                {errosTipo[cfg.key] && <p className="mt-2 text-sm font-medium text-danger">{errosTipo[cfg.key]}</p>}
-              </div>
-            )}
-          </Card>
-        );
-      })}
+          {podeEnviar && (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button variant="success" onClick={salvar} disabled={!haPendentes || salvando}>
+                {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {salvando ? 'Enviando...' : 'Salvar alterações'}
+              </Button>
+              {salvando && (
+                <p className="text-sm text-text-muted">
+                  Não feche esta página até terminar. Vídeos podem demorar um pouco.
+                </p>
+              )}
+            </div>
+          )}
+        </>
+      )}
 
-      {podeEnviar && (
-        <div className="flex flex-wrap items-center gap-3">
-          <Button variant="success" onClick={salvar} disabled={!haPendentes || salvando}>
-            {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {salvando ? 'Enviando...' : 'Salvar alterações'}
-          </Button>
-          {salvando && (
-            <p className="text-sm text-text-muted">Não feche esta página até terminar. Vídeos podem demorar um pouco.</p>
-          )}
-          {resultado && (
-            <p className={`flex items-center gap-1 text-sm font-medium ${resultado.ok ? 'text-success' : 'text-danger'}`}>
-              {resultado.ok && <Check className="h-4 w-4" />} {resultado.texto}
-            </p>
-          )}
-        </div>
+      {resultado && (
+        <p className={`flex items-center gap-1 text-sm font-medium ${resultado.ok ? 'text-success' : 'text-danger'}`}>
+          {resultado.ok && <Check className="h-4 w-4" />} {resultado.texto}
+        </p>
       )}
     </div>
   );

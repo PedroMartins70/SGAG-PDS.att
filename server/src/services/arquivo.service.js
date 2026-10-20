@@ -10,6 +10,8 @@ const SEGUNDOS_URL_ASSINADA = 60 * 60;
 /**
  * Tipos de arquivo aceitos. Os limites e MIME types precisam bater com os
  * buckets criados em migracao_arquivos.sql.
+ * - trabalho e pitch: um por bimestre (1 a 4).
+ * - logo: uma só para o projeto todo (guardada com bimestre 0).
  */
 export const TIPOS_ARQUIVO = {
   trabalho: {
@@ -65,6 +67,25 @@ function obterConfig(tipo) {
     throw new AppError(400, 'Tipo de arquivo invalido (use trabalho, pitch ou logo)');
   }
   return TIPOS_ARQUIVO[tipo];
+}
+
+/**
+ * Define o bimestre em que o arquivo é guardado.
+ * A logo vale para o projeto todo e é sempre guardada com bimestre 0.
+ * Trabalho e pitch exigem um bimestre de 1 a 4.
+ *
+ * @param {string} tipo trabalho, pitch ou logo.
+ * @param {number} bimestre Bimestre informado.
+ * @returns {number} Bimestre a ser usado (0 para a logo, 1 a 4 para os demais).
+ * @throws {AppError} 400 se o bimestre for inválido.
+ */
+function resolverBimestre(tipo, bimestre) {
+  if (tipo === 'logo') return 0;
+  const valor = Number(bimestre);
+  if (!Number.isInteger(valor) || valor < 1 || valor > 4) {
+    throw new AppError(400, 'Bimestre invalido (deve ser um numero entre 1 e 4)');
+  }
+  return valor;
 }
 
 /**
@@ -163,13 +184,15 @@ function ehLiderancaDoGrupo(grupo, usuario) {
  * @param {Object} params Parâmetros.
  * @param {string} params.grupoId UUID do grupo.
  * @param {string} params.tipo trabalho, pitch ou logo.
+ * @param {number} [params.bimestre] Bimestre (1 a 4) para trabalho e pitch; ignorado na logo.
  * @param {string} params.nome Nome original do arquivo.
  * @param {number} params.tamanho Tamanho em bytes.
  * @param {Object} params.usuario Usuário autenticado.
  * @returns {Promise<{bucket: string, caminho: string, token: string, mime: string}>} Dados do envio.
  */
-export async function gerarUrlDeEnvio({ grupoId, tipo, nome, tamanho, usuario }) {
+export async function gerarUrlDeEnvio({ grupoId, tipo, bimestre, nome, tamanho, usuario }) {
   const config = obterConfig(tipo);
+  const bimestreFinal = resolverBimestre(tipo, bimestre);
   const grupo = await buscarGrupo(grupoId);
 
   if (!ehLiderancaDoGrupo(grupo, usuario)) {
@@ -188,7 +211,7 @@ export async function gerarUrlDeEnvio({ grupoId, tipo, nome, tamanho, usuario })
     throw new AppError(400, `O arquivo excede o limite de ${config.limite / MB} MB para ${config.rotulo}`);
   }
 
-  const caminho = `${grupoId}/${tipo}-${Date.now()}.${extensao}`;
+  const caminho = `${grupoId}/${tipo}-b${bimestreFinal}-${Date.now()}.${extensao}`;
 
   const { data, error } = await supabaseAdmin.storage.from(config.bucket).createSignedUploadUrl(caminho);
 
@@ -202,26 +225,29 @@ export async function gerarUrlDeEnvio({ grupoId, tipo, nome, tamanho, usuario })
 
 /**
  * Confirma um envio: confere que o arquivo realmente chegou ao
- * armazenamento, registra na tabela e apaga o arquivo anterior do mesmo tipo.
- * Se o pitch anterior era um link, o link é substituído pelo arquivo.
+ * armazenamento, registra na tabela e apaga o arquivo anterior do mesmo
+ * tipo (e do mesmo bimestre, para trabalho e pitch). Se o pitch anterior
+ * era um link, o link é substituído pelo arquivo.
  *
  * @param {Object} params Parâmetros.
  * @param {string} params.grupoId UUID do grupo.
  * @param {string} params.tipo trabalho, pitch ou logo.
+ * @param {number} [params.bimestre] Bimestre (1 a 4) para trabalho e pitch; ignorado na logo.
  * @param {string} params.caminho Caminho devolvido por gerarUrlDeEnvio.
  * @param {string} params.nome Nome original do arquivo.
  * @param {Object} params.usuario Usuário autenticado.
  * @returns {Promise<{success: boolean}>} Resultado.
  */
-export async function confirmarEnvio({ grupoId, tipo, caminho, nome, usuario }) {
+export async function confirmarEnvio({ grupoId, tipo, bimestre, caminho, nome, usuario }) {
   const config = obterConfig(tipo);
+  const bimestreFinal = resolverBimestre(tipo, bimestre);
   const grupo = await buscarGrupo(grupoId);
 
   if (!ehLiderancaDoGrupo(grupo, usuario)) {
     throw new AppError(403, 'Apenas o lider ou o vice-lider do grupo pode enviar arquivos');
   }
 
-  const prefixo = `${grupoId}/${tipo}-`;
+  const prefixo = `${grupoId}/${tipo}-b${bimestreFinal}-`;
   if (!caminho.startsWith(prefixo) || caminho.includes('..')) {
     throw new AppError(400, 'Caminho de arquivo invalido');
   }
@@ -246,6 +272,7 @@ export async function confirmarEnvio({ grupoId, tipo, caminho, nome, usuario }) 
     .select('id, caminho')
     .eq('grupo_id', grupoId)
     .eq('tipo', tipo)
+    .eq('bimestre', bimestreFinal)
     .maybeSingle();
 
   const { data, error } = await supabaseAdmin
@@ -254,6 +281,7 @@ export async function confirmarEnvio({ grupoId, tipo, caminho, nome, usuario }) 
       {
         grupo_id: grupoId,
         tipo,
+        bimestre: bimestreFinal,
         bucket: config.bucket,
         caminho,
         url_externa: null,
@@ -263,7 +291,7 @@ export async function confirmarEnvio({ grupoId, tipo, caminho, nome, usuario }) 
         enviado_por: usuario.id,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: 'grupo_id,tipo' }
+      { onConflict: 'grupo_id,tipo,bimestre' }
     )
     .select()
     .single();
@@ -279,6 +307,7 @@ export async function confirmarEnvio({ grupoId, tipo, caminho, nome, usuario }) 
   await registrarAuditoria('grupo_arquivos', data.id, anterior ? 'UPDATE' : 'INSERT', usuario.id, {
     grupo_id: grupoId,
     tipo,
+    bimestre: bimestreFinal,
     nome_original: nome,
   });
 
@@ -286,17 +315,19 @@ export async function confirmarEnvio({ grupoId, tipo, caminho, nome, usuario }) 
 }
 
 /**
- * Salva um link (YouTube ou Google Drive) como pitch do grupo, no lugar de
- * um arquivo. Se havia um arquivo de pitch no armazenamento, ele é apagado.
- * Somente o líder ou o vice-líder do grupo pode usar.
+ * Salva um link (YouTube ou Google Drive) como pitch de um bimestre, no lugar
+ * de um arquivo. Se havia um arquivo de pitch nesse bimestre, ele é apagado
+ * do armazenamento. Somente o líder ou o vice-líder do grupo pode usar.
  *
  * @param {Object} params Parâmetros.
  * @param {string} params.grupoId UUID do grupo.
+ * @param {number} params.bimestre Bimestre do pitch (1 a 4).
  * @param {string} params.url Link digitado.
  * @param {Object} params.usuario Usuário autenticado.
  * @returns {Promise<{success: boolean}>} Resultado.
  */
-export async function salvarLinkPitch({ grupoId, url, usuario }) {
+export async function salvarLinkPitch({ grupoId, bimestre, url, usuario }) {
+  const bimestreFinal = resolverBimestre('pitch', bimestre);
   const grupo = await buscarGrupo(grupoId);
 
   if (!ehLiderancaDoGrupo(grupo, usuario)) {
@@ -316,6 +347,7 @@ export async function salvarLinkPitch({ grupoId, url, usuario }) {
     .select('id, caminho')
     .eq('grupo_id', grupoId)
     .eq('tipo', 'pitch')
+    .eq('bimestre', bimestreFinal)
     .maybeSingle();
 
   const { data, error } = await supabaseAdmin
@@ -324,6 +356,7 @@ export async function salvarLinkPitch({ grupoId, url, usuario }) {
       {
         grupo_id: grupoId,
         tipo: 'pitch',
+        bimestre: bimestreFinal,
         bucket: null,
         caminho: null,
         url_externa: link.url,
@@ -333,7 +366,7 @@ export async function salvarLinkPitch({ grupoId, url, usuario }) {
         enviado_por: usuario.id,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: 'grupo_id,tipo' }
+      { onConflict: 'grupo_id,tipo,bimestre' }
     )
     .select()
     .single();
@@ -349,6 +382,7 @@ export async function salvarLinkPitch({ grupoId, url, usuario }) {
   await registrarAuditoria('grupo_arquivos', data.id, anterior ? 'UPDATE' : 'INSERT', usuario.id, {
     grupo_id: grupoId,
     tipo: 'pitch',
+    bimestre: bimestreFinal,
     origem: link.origem,
   });
 
@@ -356,17 +390,21 @@ export async function salvarLinkPitch({ grupoId, url, usuario }) {
 }
 
 /**
- * Lista os arquivos do grupo com links de visualização e download.
- * Acesso: professor (somente leitura) e líder/vice-líder do grupo.
+ * Lista os arquivos do grupo para um bimestre: o trabalho escrito e o pitch
+ * daquele bimestre, mais a logo (que vale para o projeto todo), com links de
+ * visualização e download.
+ * Acesso: professor e avaliador (somente leitura) e líder/vice-líder do grupo.
  * O campo pode_enviar diz se a tela deve mostrar os controles de envio.
  * Cada item tem origem 'arquivo' ou 'link' (este último só para o pitch).
  *
  * @param {Object} params Parâmetros.
  * @param {string} params.grupoId UUID do grupo.
+ * @param {number} [params.bimestre=1] Bimestre a consultar (1 a 4).
  * @param {Object} params.usuario Usuário autenticado.
- * @returns {Promise<Object>} Arquivos por tipo e permissão de envio.
+ * @returns {Promise<Object>} Arquivos por tipo, bimestre e permissão de envio.
  */
-export async function listarArquivos({ grupoId, usuario }) {
+export async function listarArquivos({ grupoId, bimestre = 1, usuario }) {
+  const bimestreFinal = resolverBimestre('pitch', bimestre);
   const grupo = await buscarGrupo(grupoId);
   const lideranca = ehLiderancaDoGrupo(grupo, usuario);
 
@@ -377,7 +415,8 @@ export async function listarArquivos({ grupoId, usuario }) {
   const { data: linhas, error } = await supabaseAdmin
     .from('grupo_arquivos')
     .select('*')
-    .eq('grupo_id', grupoId);
+    .eq('grupo_id', grupoId)
+    .in('bimestre', [0, bimestreFinal]);
 
   if (error) {
     throw new AppError(500, 'Falha ao listar os arquivos do grupo');
@@ -435,7 +474,7 @@ export async function listarArquivos({ grupoId, usuario }) {
     })
   );
 
-  return { arquivos, pode_enviar: lideranca };
+  return { bimestre: bimestreFinal, arquivos, pode_enviar: lideranca };
 }
 
 /**
