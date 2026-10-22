@@ -98,11 +98,3 @@
     font-size: 12px;
   }
 }
-
-/* Respeita quem desativa animações no sistema */
-@media (prefers-reduced-motion: reduce) {
-  .robo-img,
-  .robo-balao {
-    animation: none;
-  }
-}
