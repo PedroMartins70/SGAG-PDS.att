@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, Pencil, PlusCircle, Trash2, UserX } from 'lucide-react';
+import { ArrowLeft, ClipboardCheck, Loader2, Pencil, PlusCircle, Trash2, UserX } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
 import ThemeToggle from '../components/ui/ThemeToggle.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
+import { BLOCOS, TOTAL_MAXIMO, formatarNota } from '../lib/criteriosAvaliacao.js';
 
 /** Ícone e rótulo para cada tipo de ação registrada na auditoria. */
 const ACOES = {
@@ -33,7 +34,10 @@ function formatarData(isoDate) {
 
 /**
  * Página de histórico de alterações das avaliações de um grupo.
- * Acessível para Professor, Líder e Vice-Líder do grupo.
+ * Reúne as notas dos integrantes (líder/vice/professor) e as avaliações da
+ * banca (avaliadores), da mais recente para a mais antiga.
+ * Acessível para Professor, Líder e Vice-Líder do grupo (e Avaliador, que vê
+ * apenas as próprias alterações da banca).
  *
  * @returns {JSX.Element} Página de histórico.
  */
@@ -52,14 +56,30 @@ export default function Historico() {
     (async () => {
       setCarregando(true);
       setErro('');
-      try {
-        const { historico } = await api(`/grupos/${grupoId}/avaliacoes/historico`, { token });
-        if (ativo) setHistorico(historico);
-      } catch (e) {
-        if (ativo) setErro(e.message || 'Falha ao carregar o histórico.');
-      } finally {
-        if (ativo) setCarregando(false);
+
+      // As duas listas são buscadas juntas; se uma falhar, a outra ainda aparece.
+      const [integrantes, banca] = await Promise.allSettled([
+        api(`/grupos/${grupoId}/avaliacoes/historico`, { token }),
+        api(`/grupos/${grupoId}/avaliacoes-banca/historico`, { token }),
+      ]);
+
+      if (!ativo) return;
+
+      if (integrantes.status === 'rejected' && banca.status === 'rejected') {
+        setErro(integrantes.reason?.message || 'Falha ao carregar o histórico.');
+        setHistorico([]);
+      } else {
+        const eventosIntegrantes =
+          integrantes.status === 'fulfilled'
+            ? integrantes.value.historico.map((e) => ({ ...e, tipo: 'integrante' }))
+            : [];
+        const eventosBanca = banca.status === 'fulfilled' ? banca.value.historico : [];
+
+        setHistorico(
+          [...eventosIntegrantes, ...eventosBanca].sort((a, b) => new Date(b.data) - new Date(a.data))
+        );
       }
+      setCarregando(false);
     })();
     return () => {
       ativo = false;
@@ -99,39 +119,13 @@ export default function Historico() {
           </Card>
         ) : (
           <div className="space-y-3">
-            {historico.map((evento) => {
-              const config = ACOES[evento.acao] ?? ACOES.UPDATE;
-              const Icone = config.icone;
-              return (
-                <Card key={evento.id} className="p-4">
-                  <div className="flex items-start gap-3">
-                    <Icone className={`mt-0.5 h-5 w-5 shrink-0 ${config.cor}`} />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-text">
-                        {config.rotulo}
-                        {evento.integrante?.nome ? ` — ${evento.integrante.nome}` : ''}
-                        {evento.bimestre ? ` (${evento.bimestre}º bimestre)` : ''}
-                      </p>
-                      <p className="text-xs text-text-muted">
-                        {formatarData(evento.data)}
-                        {evento.usuario?.nome ? ` · por ${evento.usuario.nome}` : ''}
-                        {evento.usuario?.role ? ` (${rotuloRole(evento.usuario.role)})` : ''}
-                      </p>
-                      {evento.alterado_por_professor && evento.acao !== 'DELETE' && (
-                        <p className="mt-1 text-xs font-semibold text-warning">
-                          Alteração feita pelo professor
-                        </p>
-                      )}
-                      {evento.comentario_esclarecimento && (
-                        <p className="mt-2 rounded-lg bg-canvas px-3 py-2 text-sm text-text">
-                          "{evento.comentario_esclarecimento}"
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
+            {historico.map((evento) =>
+              evento.tipo === 'banca' ? (
+                <EventoBanca key={evento.id} evento={evento} />
+              ) : (
+                <EventoIntegrante key={evento.id} evento={evento} />
+              )
+            )}
           </div>
         )}
       </main>
@@ -140,14 +134,130 @@ export default function Historico() {
 }
 
 /**
+ * Cartão de um evento de nota de integrante (líder/vice/professor).
+ *
+ * @param {Object} props Propriedades.
+ * @param {Object} props.evento Evento do histórico.
+ * @returns {JSX.Element} Cartão do evento.
+ */
+function EventoIntegrante({ evento }) {
+  const config = ACOES[evento.acao] ?? ACOES.UPDATE;
+  const Icone = config.icone;
+  return (
+    <Card className="p-4">
+      <div className="flex items-start gap-3">
+        <Icone className={`mt-0.5 h-5 w-5 shrink-0 ${config.cor}`} />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-text">
+            {config.rotulo}
+            {evento.integrante?.nome ? ` — ${evento.integrante.nome}` : ''}
+            {evento.bimestre ? ` (${evento.bimestre}º bimestre)` : ''}
+          </p>
+          <p className="text-xs text-text-muted">
+            {formatarData(evento.data)}
+            {evento.usuario?.nome ? ` · por ${evento.usuario.nome}` : ''}
+            {evento.usuario?.role ? ` (${rotuloRole(evento.usuario.role)})` : ''}
+          </p>
+          {evento.alterado_por_professor && evento.acao !== 'DELETE' && (
+            <p className="mt-1 text-xs font-semibold text-warning">Alteração feita pelo professor</p>
+          )}
+          {evento.comentario_esclarecimento && (
+            <p className="mt-2 rounded-lg bg-canvas px-3 py-2 text-sm text-text">
+              "{evento.comentario_esclarecimento}"
+            </p>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Cartão de um evento da avaliação da banca: notas dos 4 blocos, total,
+ * valores anteriores (quando foi uma alteração) e comentário.
+ *
+ * @param {Object} props Propriedades.
+ * @param {Object} props.evento Evento do histórico da banca.
+ * @returns {JSX.Element} Cartão do evento.
+ */
+function EventoBanca({ evento }) {
+  const novo = evento.acao === 'INSERT';
+  const anterior = evento.notas_anteriores;
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-start gap-3">
+        <ClipboardCheck className={`mt-0.5 h-5 w-5 shrink-0 ${novo ? 'text-success' : 'text-warning'}`} />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-text">
+            {novo ? 'Avaliação da banca lançada' : 'Avaliação da banca alterada'}
+            {evento.bimestre ? ` (${evento.bimestre}º bimestre)` : ''}
+          </p>
+          <p className="text-xs text-text-muted">
+            {formatarData(evento.data)}
+            {evento.usuario?.nome ? ` · por ${evento.usuario.nome}` : ''}
+            {evento.usuario?.role ? ` (${rotuloRole(evento.usuario.role)})` : ''}
+          </p>
+
+          {evento.notas && (
+            <>
+              <p className="mt-2 text-sm font-semibold text-primary">
+                Total: {formatarNota(evento.nota_total ?? 0)} / {formatarNota(TOTAL_MAXIMO)}
+                {evento.nota_total_anterior !== null && evento.nota_total_anterior !== undefined && (
+                  <span className="font-normal text-text-muted">
+                    {' '}
+                    (antes: {formatarNota(evento.nota_total_anterior)})
+                  </span>
+                )}
+              </p>
+
+              <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                {BLOCOS.map((bloco) => {
+                  const atual = evento.notas[bloco.id];
+                  const antes = anterior?.[bloco.id];
+                  const mudou = antes !== undefined && antes !== atual;
+                  return (
+                    <div
+                      key={bloco.id}
+                      className="rounded-lg border border-border bg-surface-muted px-3 py-2"
+                    >
+                      <p className="text-xs text-text-muted">{bloco.titulo}</p>
+                      <p className="font-semibold text-text">
+                        {atual === undefined ? '—' : formatarNota(atual)}
+                        {mudou && (
+                          <span className="ml-1 text-xs font-normal text-text-muted">
+                            (antes: {formatarNota(antes)})
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {evento.comentario && (
+            <p className="mt-2 whitespace-pre-wrap rounded-lg bg-canvas px-3 py-2 text-sm text-text">
+              "{evento.comentario}"
+            </p>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/**
  * Traduz o papel do usuário para um rótulo legível.
  *
- * @param {string} role Papel do usuário (professor, lider, vice_lider).
+ * @param {string} role Papel do usuário (professor, lider, vice_lider, avaliador).
  * @returns {string} Rótulo em português.
  */
 function rotuloRole(role) {
   if (role === 'professor') return 'Professor';
   if (role === 'lider') return 'Líder';
   if (role === 'vice_lider') return 'Vice-Líder';
+  if (role === 'avaliador') return 'Avaliador';
   return role;
 }

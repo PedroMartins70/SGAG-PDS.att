@@ -6,6 +6,7 @@ import Button from '../components/ui/Button.jsx';
 import Avatar from '../components/ui/Avatar.jsx';
 import ThemeToggle from '../components/ui/ThemeToggle.jsx';
 import ProjetoArquivos from '../components/ProjetoArquivos.jsx';
+import AvaliacaoBanca from '../components/AvaliacaoBanca.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 
@@ -33,11 +34,11 @@ function formatar(valor) {
 }
 
 /**
- * Tela de consulta de um grupo para o Avaliador da banca (somente leitura).
- * Mostra a logo, o líder e o vice, as notas dadas por bimestre (critérios,
- * total, quem avaliou, ajustes do professor e comentários), os arquivos do
- * projeto e o atalho para o histórico de alterações. Não tem nenhum controle
- * de edição.
+ * Tela de um grupo para o Avaliador da banca.
+ * Mostra a logo, o líder e o vice e o formulário de AVALIAÇÃO DA BANCA
+ * (4 blocos da ficha + comentário, por bimestre), além das notas que o
+ * líder/vice deram aos integrantes (somente leitura), os arquivos do projeto
+ * e o atalho para o histórico de alterações.
  *
  * @returns {JSX.Element} Tela do grupo para o avaliador.
  */
@@ -106,7 +107,7 @@ export default function AvaliadorGrupo() {
             )}
             <div className="leading-tight">
               <h1 className="font-display text-lg font-bold text-text">{grupo.nome}</h1>
-              <p className="text-xs text-text-muted">Notas, arquivos e histórico do grupo</p>
+              <p className="text-xs text-text-muted">Avaliação, notas, arquivos e histórico do grupo</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -164,6 +165,11 @@ export default function AvaliadorGrupo() {
               {grupo.media_geral === null ? '—' : `${formatar(grupo.media_geral)} / 1,00`}
             </p>
           </Card>
+        </div>
+
+        {/* Avaliação da banca (o avaliador preenche; usa o bimestre escolhido acima) */}
+        <div className="mb-10">
+          <AvaliacaoBanca grupoId={grupoId} bimestre={bimestre} />
         </div>
 
         {/* Notas por integrante */}

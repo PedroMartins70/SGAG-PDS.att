@@ -9,6 +9,7 @@ import Input from '../components/ui/Input.jsx';
 import Avatar from '../components/ui/Avatar.jsx';
 import ThemeToggle from '../components/ui/ThemeToggle.jsx';
 import ProjetoArquivos from '../components/ProjetoArquivos.jsx';
+import AvaliacaoBanca from '../components/AvaliacaoBanca.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 
@@ -28,9 +29,9 @@ const critVazio = () => Object.fromEntries(CRITERIOS.map((c) => [c.key, '']));
 
 /**
  * Página de detalhe do grupo (Professor): ver e editar avaliações por
- * bimestre, renomear o grupo, gerenciar integrantes e ver (somente leitura)
- * os arquivos do projeto enviados pelo líder/vice. A edição de avaliação
- * exige justificativa.
+ * bimestre, renomear o grupo, gerenciar integrantes, ver (somente leitura)
+ * as avaliações da banca e os arquivos do projeto enviados pelo líder/vice.
+ * A edição de avaliação exige justificativa.
  *
  * @returns {JSX.Element} Página de detalhe do grupo.
  */
@@ -242,6 +243,11 @@ export default function DetalheGrupo() {
             ))}
           </div>
         )}
+
+        {/* Avaliação da banca (somente leitura para o professor; usa o bimestre escolhido acima) */}
+        <div className="mt-10">
+          <AvaliacaoBanca grupoId={grupoId} bimestre={bimestre} />
+        </div>
 
         {/* Arquivos do projeto (somente visualização para o professor) */}
         <h2 className="mb-4 mt-10 font-display text-xl font-bold text-text">Arquivos do projeto</h2>

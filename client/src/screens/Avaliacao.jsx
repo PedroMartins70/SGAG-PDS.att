@@ -6,6 +6,7 @@ import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
 import Avatar from '../components/ui/Avatar.jsx';
 import ProjetoArquivos from '../components/ProjetoArquivos.jsx';
+import AvaliacaoBanca from '../components/AvaliacaoBanca.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 
@@ -24,6 +25,7 @@ const BIMESTRES = [1, 2, 3, 4];
 /** Abas da tela. */
 const ABAS = [
   { key: 'avaliacoes', rotulo: 'Avaliações' },
+  { key: 'banca', rotulo: 'Notas da banca' },
   { key: 'arquivos', rotulo: 'Arquivos do projeto' },
 ];
 
@@ -31,10 +33,12 @@ const ABAS = [
 const vazio = () => Object.fromEntries(CRITERIOS.map((c) => [c.key, '']));
 
 /**
- * Tela do Líder/Vice-Líder sobre o seu grupo, com duas abas:
+ * Tela do Líder/Vice-Líder sobre o seu grupo, com três abas:
  * - Avaliações: avalia cada integrante por bimestre (5 critérios, nota máxima
  *   1,00, comentário opcional). Uma avaliação já alterada pelo professor fica
  *   travada para o Líder/Vice-Líder.
+ * - Notas da banca: mostra (somente leitura) as notas e comentários dos
+ *   avaliadores da banca para o grupo, por bimestre.
  * - Arquivos do projeto: envio do trabalho escrito (PDF), do pitch (vídeo) e
  *   da logo, com o botão "Salvar alterações".
  *
@@ -110,13 +114,13 @@ export default function Avaliacao() {
       </div>
 
       {/* Abas */}
-      <div className="flex gap-2 border-b border-border">
+      <div className="flex gap-2 overflow-x-auto border-b border-border">
         {ABAS.map((item) => (
           <button
             key={item.key}
             type="button"
             onClick={() => setAba(item.key)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
+            className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
               aba === item.key
                 ? 'border-primary text-primary'
                 : 'border-transparent text-text-muted hover:text-text'
@@ -129,6 +133,8 @@ export default function Avaliacao() {
 
       {aba === 'arquivos' ? (
         <ProjetoArquivos grupoId={grupo.id} />
+      ) : aba === 'banca' ? (
+        <AvaliacaoBanca grupoId={grupo.id} />
       ) : (
         <>
           <p className="text-sm text-text-muted">Avalie cada integrante de 0,00 a 0,20 por critério.</p>

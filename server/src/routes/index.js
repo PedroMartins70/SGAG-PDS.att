@@ -7,6 +7,7 @@ import avaliacaoRoutes from './avaliacao.routes.js';
 import arquivoRoutes from './arquivo.routes.js';
 import dashboardRoutes from './dashboard.routes.js';
 import auditRoutes from './audit.routes.js';
+import avaliacaoBancaRoutes from './avaliacaoBanca.routes.js';
 
 const router = Router();
 
@@ -18,5 +19,6 @@ router.use(avaliacaoRoutes);
 router.use(arquivoRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/audit-logs', auditRoutes);
+router.use(avaliacaoBancaRoutes);
 
 export default router;
