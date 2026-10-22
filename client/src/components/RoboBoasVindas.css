@@ -1,0 +1,108 @@
+/* Fica no canto inferior esquerdo da PÁGINA (a raiz do Login tem "relative").
+   Como não é "fixed", ele rola junto com a página e nunca fica por cima do conteúdo. */
+.robo-container {
+  position: absolute;
+  left: 16px;
+  bottom: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  z-index: 40;
+  pointer-events: none; /* não atrapalha cliques */
+}
+
+/* ----- ROBÔ ----- */
+.robo-img {
+  width: 240px; /* tamanho no computador */
+  height: auto;
+  animation:
+    roboEntrada 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+    roboFlutuar 3s ease-in-out 1.2s infinite;
+}
+
+/* ----- BALÃO ----- */
+.robo-balao {
+  position: relative;
+  max-width: 230px;
+  margin-bottom: 60px; /* altura do balão em relação ao robô */
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #1e3a5f;
+  background: linear-gradient(135deg, #ffffff 0%, #e3f0ff 100%);
+  border: 2px solid #8fb8ea;
+  border-radius: 18px 18px 18px 4px;
+  box-shadow: 0 6px 18px rgba(79, 142, 220, 0.3);
+  transform-origin: bottom left;
+  animation: balaoEntrada 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 1s both;
+}
+
+.robo-balao strong {
+  color: #2f6fd0;
+  font-size: 14px;
+}
+
+/* Ponta do balão apontando para o robô */
+.robo-balao::after {
+  content: "";
+  position: absolute;
+  left: -9px;
+  bottom: 14px;
+  width: 14px;
+  height: 14px;
+  background: #eaf3ff;
+  border-left: 2px solid #8fb8ea;
+  border-bottom: 2px solid #8fb8ea;
+  transform: rotate(45deg);
+}
+
+/* ----- ANIMAÇÕES ----- */
+@keyframes roboEntrada {
+  from { opacity: 0; transform: translateY(100px) scale(0.8); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes roboFlutuar {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+
+@keyframes balaoEntrada {
+  from { opacity: 0; transform: scale(0.3); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ----- CELULAR ----- */
+@media (max-width: 639px) {
+  .robo-container {
+    left: 8px;
+    gap: 8px;
+  }
+
+  .robo-img {
+    width: 110px;
+  }
+
+  .robo-balao {
+    max-width: 175px;
+    margin-bottom: 30px;
+    padding: 8px 10px;
+    font-size: 11px;
+    border-radius: 14px 14px 14px 4px;
+  }
+
+  .robo-balao strong {
+    font-size: 12px;
+  }
+}
+
+/* Respeita quem desativa animações no sistema */
+@media (prefers-reduced-motion: reduce) {
+  .robo-img,
+  .robo-balao {
+    animation: none;
+  }
+}

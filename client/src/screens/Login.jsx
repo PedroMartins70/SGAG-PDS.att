@@ -6,6 +6,7 @@ import Card from '../components/ui/Card.jsx';
 import Input from '../components/ui/Input.jsx';
 import ThemeToggle from '../components/ui/ThemeToggle.jsx';
 import { useAuth } from '../auth/AuthContext.jsx';
+import RoboBoasVindas from '../components/RoboBoasVindas.jsx';
 
 /**
  * Ícone de logo do SGAG-PDS (versão inline, sem dependências externas).
@@ -100,8 +101,9 @@ export default function Login() {
         <ThemeToggle />
       </div>
 
-      {/* Coluna esquerda — ilustração e branding */}
-      <div className="hidden w-1/2 flex-col items-center justify-center bg-primary/5 lg:flex">
+      {/* Coluna esquerda — ilustração e branding
+          (lg:pb-44 reserva espaço embaixo para o robô não tampar nada) */}
+      <div className="hidden w-1/2 flex-col items-center justify-center bg-primary/5 lg:flex lg:pb-44">
         <div className="flex flex-col items-center gap-6 px-8 text-center">
           <div className="flex items-center gap-3">
             <LogoIcon className="h-10 w-10" />
@@ -123,8 +125,9 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Coluna direita — formulário */}
-      <div className="flex w-full items-center justify-center p-4 lg:w-1/2">
+      {/* Coluna direita — formulário
+          (pb-28 / sm:pb-40 reservam espaço embaixo no celular e tablet para o robô) */}
+      <div className="flex w-full items-center justify-center p-4 pb-28 sm:pb-40 lg:w-1/2 lg:pb-4">
         <Card className="w-full max-w-md p-6 sm:p-8">
           <div className="mb-6 flex flex-col items-center gap-3 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-soft">
@@ -184,6 +187,9 @@ export default function Login() {
           </form>
         </Card>
       </div>
+
+      {/* Robô de boas-vindas (canto inferior esquerdo) */}
+      <RoboBoasVindas />
     </div>
   );
 }
