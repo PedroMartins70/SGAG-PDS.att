@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { requireAuth, requireRoles } from '../middlewares/auth.middleware.js';
 import {
+  definirPeriodo,
   listarAvaliacoesBanca,
   listarHistoricoBanca,
+  listarPeriodos,
+  removerPeriodo,
   salvarAvaliacaoBanca,
 } from '../controllers/avaliacaoBanca.controller.js';
 
@@ -16,5 +19,9 @@ router.put(
   requireRoles('avaliador'),
   salvarAvaliacaoBanca
 );
+
+router.get('/avaliacoes-banca/periodos', requireAuth, listarPeriodos);
+router.put('/avaliacoes-banca/periodos/:bimestre', requireAuth, requireRoles('professor'), definirPeriodo);
+router.delete('/avaliacoes-banca/periodos/:bimestre', requireAuth, requireRoles('professor'), removerPeriodo);
 
 export default router;

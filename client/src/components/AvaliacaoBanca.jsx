@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Loader2 } from 'lucide-react';
+import { Check, Loader2, Lock } from 'lucide-react';
 import Card from './ui/Card.jsx';
 import FormularioAvaliacao from './FormularioAvaliacao.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { BLOCOS, ESCALA, TOTAL_MAXIMO, formatarNota } from '../lib/criteriosAvaliacao.js';
+import { SITUACOES, textoDoPeriodo } from '../lib/periodoBanca.js';
 
 const BIMESTRES = [1, 2, 3, 4];
 
@@ -16,7 +17,8 @@ function formatarData(iso) {
 
 /**
  * Avaliação da banca de um grupo, por bimestre.
- * - Avaliador: preenche e salva a própria avaliação (4 blocos + comentário).
+ * - Avaliador: preenche e salva a própria avaliação (4 blocos + comentário),
+ *   mas SÓ dentro do período liberado pelo professor.
  * - Professor, Líder e Vice-Líder: veem as avaliações (somente leitura).
  *
  * O servidor decide quem pode editar; este componente apenas obedece.
@@ -71,12 +73,15 @@ export default function AvaliacaoBanca({ grupoId, bimestre: bimestreExterno }) {
       setFeedback({ tipo: 'ok', texto: 'Avaliação salva!' });
     } catch (e) {
       setFeedback({ tipo: 'erro', texto: e.message || 'Falha ao salvar.' });
+      carregar(); // se o período fechou enquanto a página estava aberta, o formulário trava
     } finally {
       setSalvando(false);
     }
   }
 
   const minha = dados?.avaliacoes?.[0];
+  const ehAvaliador = dados?.permissao?.ehAvaliador;
+  const podeEditar = dados?.permissao?.podeEditar;
 
   return (
     <section className="space-y-4">
@@ -110,14 +115,18 @@ export default function AvaliacaoBanca({ grupoId, bimestre: bimestreExterno }) {
         </div>
       ) : erro ? (
         <Card className="p-6 text-center text-sm text-text-muted">{erro}</Card>
-      ) : dados?.permissao?.podeEditar ? (
+      ) : ehAvaliador ? (
         <>
-          <p className="text-sm text-text-muted">
-            Escolha uma nota para cada bloco e, se quiser, deixe suas observações. Você pode
-            editar e salvar novamente quando precisar.
-          </p>
+          <AvisoPeriodo periodo={dados.periodo} destaque />
+          {podeEditar && (
+            <p className="text-sm text-text-muted">
+              Escolha uma nota para cada bloco e, se quiser, deixe suas observações. Você pode
+              editar e salvar novamente enquanto o período estiver aberto.
+            </p>
+          )}
           <FormularioAvaliacao
             valoresIniciais={minha ? { notas: minha.notas, comentario: minha.comentario } : undefined}
+            somenteLeitura={!podeEditar}
             salvando={salvando}
             onSalvar={salvar}
           />
@@ -132,24 +141,54 @@ export default function AvaliacaoBanca({ grupoId, bimestre: bimestreExterno }) {
             </p>
           )}
         </>
-      ) : dados?.avaliacoes?.length ? (
-        <>
-          {dados.resumo.quantidade > 1 && (
-            <p className="text-sm text-text-muted">
-              Média da banca: <strong className="text-text">{formatarNota(dados.resumo.media_total)}</strong> /{' '}
-              {formatarNota(TOTAL_MAXIMO)} ({dados.resumo.quantidade} avaliadores)
-            </p>
-          )}
-          {dados.avaliacoes.map((avaliacao) => (
-            <CartaoAvaliador key={avaliacao.id} avaliacao={avaliacao} />
-          ))}
-        </>
       ) : (
-        <Card className="p-6 text-center text-sm text-text-muted">
-          Nenhum avaliador registrou nota neste bimestre ainda.
-        </Card>
+        <>
+          <AvisoPeriodo periodo={dados?.periodo} />
+          {dados?.avaliacoes?.length ? (
+            <>
+              {dados.resumo.quantidade > 1 && (
+                <p className="text-sm text-text-muted">
+                  Média da banca: <strong className="text-text">{formatarNota(dados.resumo.media_total)}</strong> /{' '}
+                  {formatarNota(TOTAL_MAXIMO)} ({dados.resumo.quantidade} avaliadores)
+                </p>
+              )}
+              {dados.avaliacoes.map((avaliacao) => (
+                <CartaoAvaliador key={avaliacao.id} avaliacao={avaliacao} />
+              ))}
+            </>
+          ) : (
+            <Card className="p-6 text-center text-sm text-text-muted">
+              Nenhum avaliador registrou nota neste bimestre ainda.
+            </Card>
+          )}
+        </>
       )}
     </section>
+  );
+}
+
+/**
+ * Mostra a situação do período de avaliação do bimestre.
+ * Para o avaliador (destaque), aparece uma caixa chamativa quando estiver fechado.
+ */
+function AvisoPeriodo({ periodo, destaque = false }) {
+  if (!periodo) return null;
+  const situacao = SITUACOES[periodo.situacao] ?? SITUACOES.nao_definido;
+
+  if (destaque && !periodo.aberto) {
+    return (
+      <div className="flex items-start gap-2 rounded-lg border border-warning-soft bg-warning-soft px-3 py-2 text-sm font-medium text-warning">
+        <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+        <span>{textoDoPeriodo(periodo)}</span>
+      </div>
+    );
+  }
+
+  return (
+    <p className="flex flex-wrap items-center gap-2 text-sm text-text-muted">
+      <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${situacao.classe}`}>{situacao.texto}</span>
+      {textoDoPeriodo(periodo)}
+    </p>
   );
 }
 

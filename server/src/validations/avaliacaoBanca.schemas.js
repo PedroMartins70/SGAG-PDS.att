@@ -25,3 +25,20 @@ export const avaliacaoBancaSchema = z.object({
 export const listarAvaliacoesBancaQuerySchema = z.object({
   bimestre: bimestre.default(1),
 });
+
+/** Data no formato AAAA-MM-DD e que realmente existe (ex.: recusa 2026-02-31). */
+const dataISO = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data invalida (use AAAA-MM-DD)')
+  .refine((valor) => new Date(`${valor}T00:00:00Z`).toISOString().slice(0, 10) === valor, 'Data invalida');
+
+/** Parâmetro :bimestre da URL. */
+export const bimestreParamSchema = z.object({ bimestre });
+
+/** Corpo do PUT /avaliacoes-banca/periodos/:bimestre */
+export const periodoSchema = z
+  .object({ abre_em: dataISO, fecha_em: dataISO })
+  .refine((dados) => dados.fecha_em >= dados.abre_em, {
+    message: 'A data de fechamento deve ser igual ou posterior a de abertura',
+    path: ['fecha_em'],
+  });

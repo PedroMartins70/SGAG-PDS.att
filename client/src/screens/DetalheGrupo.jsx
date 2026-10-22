@@ -10,6 +10,7 @@ import Avatar from '../components/ui/Avatar.jsx';
 import ThemeToggle from '../components/ui/ThemeToggle.jsx';
 import ProjetoArquivos from '../components/ProjetoArquivos.jsx';
 import AvaliacaoBanca from '../components/AvaliacaoBanca.jsx';
+import PeriodosAvaliacao from '../components/PeriodosAvaliacao.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 
@@ -45,6 +46,7 @@ export default function DetalheGrupo() {
   const [bimestre, setBimestre] = useState(1);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
+  const [versaoBanca, setVersaoBanca] = useState(0);
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({ nome: '', integrante: '', justificativa: '', crit: critVazio() });
 
@@ -246,7 +248,12 @@ export default function DetalheGrupo() {
 
         {/* Avaliação da banca (somente leitura para o professor; usa o bimestre escolhido acima) */}
         <div className="mt-10">
-          <AvaliacaoBanca grupoId={grupoId} bimestre={bimestre} />
+          <AvaliacaoBanca key={versaoBanca} grupoId={grupoId} bimestre={bimestre} />
+        </div>
+
+        {/* Período em que os avaliadores podem avaliar (vale para todos os grupos) */}
+        <div className="mt-10">
+          <PeriodosAvaliacao onAlterado={() => setVersaoBanca((v) => v + 1)} />
         </div>
 
         {/* Arquivos do projeto (somente visualização para o professor) */}
