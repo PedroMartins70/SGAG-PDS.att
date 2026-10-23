@@ -112,7 +112,7 @@ export default function PeriodosAvaliacao({ onAlterado }) {
       ) : erro ? (
         <Card className="p-6 text-center text-sm text-text-muted">{erro}</Card>
       ) : (
-        <div className="space-y-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           {periodos.map((periodo) => {
             const b = periodo.bimestre;
             const linha = datas[b] ?? { abre: '', fecha: '' };

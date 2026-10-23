@@ -8,13 +8,15 @@ import Avatar from '../components/ui/Avatar.jsx';
 import Mascot from '../components/ui/Mascot.jsx';
 import LogoEscola from '../components/LogoEscola.jsx';
 import ThemeToggle from '../components/ui/ThemeToggle.jsx';
+import PeriodosAvaliacao from '../components/PeriodosAvaliacao.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import Avaliacao from './Avaliacao.jsx';
 
 /**
  * Painel principal.
- * - Professor: turmas (3A-3D) com até 5 grupos cada, com gestão e avaliação.
+ * - Professor: turmas (3A-3D) com até 5 grupos cada, com gestão e avaliação,
+ *   e o painel para liberar o período de avaliação da banca.
  * - Avaliador da banca: as mesmas turmas e grupos, em modo consulta.
  * - Líder/Vice-Líder: avaliação e arquivos do próprio grupo.
  *
@@ -71,7 +73,7 @@ export default function Dashboard() {
       <header className="sticky top-0 z-10 border-b border-border bg-surface/80 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">
-                        <LogoEscola />
+            <LogoEscola />
             <Mascot className="h-9 w-9" />
             <div className="leading-tight">
               <h1 className="font-display text-lg font-bold text-text">{titulo}</h1>
@@ -101,7 +103,16 @@ export default function Dashboard() {
           ) : erro ? (
             <Card className="p-8 text-center text-danger">{erro}</Card>
           ) : (
-            <VisaoTurmas dados={dados} avaliador={role === 'avaliador'} />
+            <>
+              <VisaoTurmas dados={dados} avaliador={role === 'avaliador'} />
+
+              {/* Período em que os avaliadores podem avaliar (só o professor define) */}
+              {role === 'professor' && (
+                <div className="mt-12">
+                  <PeriodosAvaliacao />
+                </div>
+              )}
+            </>
           )
         ) : (
           <Avaliacao />

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import { registrarAuditoria } from '../utils/audit.js';
+import { obterPeriodo } from './periodoBanca.service.js';
 
 /** Bloco da ficha -> coluna da tabela avaliacoes_banca. */
 const COLUNAS = {
@@ -94,6 +95,8 @@ export async function listarAvaliacoesBanca(grupoId, usuario, bimestre = 1) {
     throw new AppError(403, 'Sem permissao para ver as avaliacoes da banca deste grupo');
   }
 
+  const periodo = await obterPeriodo(bimestreValido);
+
   let consulta = supabaseAdmin
     .from('avaliacoes_banca')
     .select('*')
@@ -122,7 +125,8 @@ export async function listarAvaliacoesBanca(grupoId, usuario, bimestre = 1) {
   return {
     grupo: { id: grupo.id, nome: grupo.nome },
     bimestre: bimestreValido,
-    permissao: { podeEditar: ehAvaliador },
+    periodo,
+    permissao: { ehAvaliador, podeEditar: ehAvaliador && periodo.aberto },
     avaliacoes,
     resumo: {
       quantidade: avaliacoes.length,
@@ -152,6 +156,12 @@ export async function salvarAvaliacaoBanca({ grupoId, bimestre, notas, comentari
 
   const bimestreValido = validarBimestre(bimestre);
   await buscarGrupo(grupoId);
+
+  // Trava de segurança: só avalia dentro do período definido pelo professor
+  const periodo = await obterPeriodo(bimestreValido);
+  if (!periodo.aberto) {
+    throw new AppError(403, periodo.mensagem);
+  }
 
   const { data: existente } = await supabaseAdmin
     .from('avaliacoes_banca')
