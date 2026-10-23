@@ -1,6 +1,12 @@
 import { supabaseAdmin, criarClienteAuth } from '../config/supabase.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import { registrarAuditoria } from '../utils/audit.js';
+import {
+  exigirNaoBloqueado,
+  normalizarEmail,
+  registrarFalha,
+  registrarSucesso,
+} from './loginSeguranca.service.js';
 
 /**
  * Autentica um usuário no Supabase Auth e retorna a sessão JWT
@@ -11,34 +17,45 @@ import { registrarAuditoria } from '../utils/audit.js';
  * Se contaminasse, as escritas seguintes seriam feitas como usuário comum
  * (role authenticated) e seriam bloqueadas pelo RLS.
  *
- * Mensagens de erro específicas: diferencia e-mail não cadastrado de senha incorreta.
+ * Proteção contra força bruta:
+ * - Depois de várias senhas erradas seguidas no mesmo e-mail (ou do mesmo IP),
+ *   o login é bloqueado temporariamente (erro 429), mesmo que a senha certa
+ *   seja digitada durante o bloqueio.
+ * - A mensagem de erro é SEMPRE a mesma ("e-mail ou senha incorretos"), exista
+ *   a conta ou não, para o atacante não descobrir quais e-mails estão cadastrados.
  *
  * @param {Object} dados Dados de login validados.
  * @param {string} dados.email E-mail do usuário.
  * @param {string} dados.senha Senha do usuário.
+ * @param {string} [dados.ip] IP de origem da requisição.
  * @returns {Promise<{session: Object, user: Object}>} Sessão e perfil autenticados.
- * @throws {AppError} Com a causa específica do erro de autenticação.
+ * @throws {AppError} 401 (credenciais), 429 (bloqueado) ou 403 (perfil desativado).
  */
-export async function login({ email, senha }) {
-  const { data: conta } = await supabaseAdmin
-    .from('profiles')
-    .select('id, email')
-    .eq('email', email)
-    .maybeSingle();
+export async function login({ email, senha, ip }) {
+  const emailNormalizado = normalizarEmail(email);
 
-  if (!conta) {
-    throw new AppError(401, 'Nenhuma conta encontrada com esse e-mail.');
-  }
+  await exigirNaoBloqueado({ email: emailNormalizado, ip });
 
   const clienteAuth = criarClienteAuth();
   const { data, error } = await clienteAuth.auth.signInWithPassword({
-    email,
+    email: emailNormalizado,
     password: senha,
   });
 
   if (error || !data?.user) {
-    throw new AppError(401, 'Senha incorreta. Verifique e tente novamente.');
+    // Problema do serviço de autenticação (não é senha errada): não conta como falha
+    if (error && (error.status >= 500 || error.name === 'AuthRetryableFetchError')) {
+      throw new AppError(503, 'Servico de autenticacao indisponivel. Tente novamente em instantes.');
+    }
+
+    const { restantes } = await registrarFalha({ email: emailNormalizado, ip });
+    throw new AppError(
+      401,
+      `E-mail ou senha incorretos. Restam ${restantes} tentativa(s) antes do bloqueio temporario.`
+    );
   }
+
+  await registrarSucesso({ email: emailNormalizado, ip });
 
   const { data: perfil, error: perfilError } = await supabaseAdmin
     .from('profiles')

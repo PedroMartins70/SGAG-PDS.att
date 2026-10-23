@@ -5,6 +5,7 @@ import apiRoutes from './routes/index.js';
 import { errorHandler, notFound } from './middlewares/error.middleware.js';
 
 const app = express();
+app.set('trust proxy', 1);
 
 const allowedOrigins = [
   'http://localhost:5173',

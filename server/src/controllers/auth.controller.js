@@ -4,10 +4,11 @@ import * as authService from '../services/auth.service.js';
 
 /**
  * POST /api/auth/login — Autentica o usuário e retorna sessão + perfil.
+ * Repassa o IP de origem para a proteção contra força bruta.
  */
 export const login = asyncHandler(async (req, res) => {
   const dados = loginSchema.parse(req.body);
-  const resultado = await authService.login(dados);
+  const resultado = await authService.login({ ...dados, ip: req.ip });
   res.json(resultado);
 });
 

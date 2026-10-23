@@ -1,12 +1,16 @@
 import rateLimit from 'express-rate-limit';
 
 /**
- * Limita tentativas de login para mitigar ataques de força bruta.
- * Configurável via RATE_LIMIT_LOGIN (default 20 por janela de 15 min).
+ * Limita tentativas de login por IP para mitigar ataques de força bruta.
+ * Só conta as tentativas que FALHAM (skipSuccessfulRequests): assim, vários
+ * alunos entrando pela mesma rede da escola não bloqueiam uns aos outros.
+ * O bloqueio por conta (e-mail) fica em loginSeguranca.service.js.
+ * Configurável via RATE_LIMIT_LOGIN (default 20 falhas por janela de 15 min).
  */
 export const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: Number(process.env.RATE_LIMIT_LOGIN) || 20,
+  skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Muitas tentativas de login. Tente novamente mais tarde.' },
