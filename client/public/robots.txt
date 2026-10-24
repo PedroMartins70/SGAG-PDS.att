@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://sgag-pds-att-fiew.vercel.app/sitemap.xml
