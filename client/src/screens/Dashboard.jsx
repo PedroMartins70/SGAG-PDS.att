@@ -11,6 +11,7 @@ import ThemeToggle from '../components/ui/ThemeToggle.jsx';
 import PeriodosAvaliacao from '../components/PeriodosAvaliacao.jsx';
 import MateriaisProfessor from '../components/MateriaisProfessor.jsx';
 import MateriaisConsulta from '../components/MateriaisConsulta.jsx';
+import LinkPrivacidade from '../components/PoliticaPrivacidade.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import Avaliacao from './Avaliacao.jsx';
@@ -153,6 +154,10 @@ export default function Dashboard() {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">{conteudo()}</main>
+
+      <footer className="mx-auto max-w-5xl px-4 pb-8 text-center text-xs text-text-muted sm:px-6">
+        <LinkPrivacidade />
+      </footer>
     </div>
   );
 }

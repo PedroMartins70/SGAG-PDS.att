@@ -7,6 +7,7 @@ import Input from '../components/ui/Input.jsx';
 import ThemeToggle from '../components/ui/ThemeToggle.jsx';
 import { useAuth } from '../auth/AuthContext.jsx';
 import RoboBoasVindas from '../components/RoboBoasVindas.jsx';
+import LinkPrivacidade from '../components/PoliticaPrivacidade.jsx';
 
 /**
  * Ícone de logo do SGAG-PDS (versão inline, sem dependências externas).
@@ -185,6 +186,9 @@ export default function Login() {
               </Button>
             </div>
           </form>
+                    <p className="mt-4 text-center text-xs text-text-muted">
+            Ao usar o sistema, você declara ter lido a <LinkPrivacidade />.
+          </p>
         </Card>
       </div>
 
