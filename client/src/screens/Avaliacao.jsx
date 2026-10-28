@@ -7,6 +7,7 @@ import Card from '../components/ui/Card.jsx';
 import Avatar from '../components/ui/Avatar.jsx';
 import ProjetoArquivos from '../components/ProjetoArquivos.jsx';
 import AvaliacaoBanca from '../components/AvaliacaoBanca.jsx';
+import MateriaisConsulta from '../components/MateriaisConsulta.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 
@@ -26,6 +27,7 @@ const BIMESTRES = [1, 2, 3, 4];
 const ABAS = [
   { key: 'avaliacoes', rotulo: 'Avaliações' },
   { key: 'banca', rotulo: 'Notas da banca' },
+  { key: 'materiais', rotulo: 'Materiais' },
   { key: 'arquivos', rotulo: 'Arquivos do projeto' },
 ];
 
@@ -33,12 +35,13 @@ const ABAS = [
 const vazio = () => Object.fromEntries(CRITERIOS.map((c) => [c.key, '']));
 
 /**
- * Tela do Líder/Vice-Líder sobre o seu grupo, com três abas:
+ * Tela do Líder/Vice-Líder sobre o seu grupo, com quatro abas:
  * - Avaliações: avalia cada integrante por bimestre (5 critérios, nota máxima
  *   1,00, comentário opcional). Uma avaliação já alterada pelo professor fica
  *   travada para o Líder/Vice-Líder.
  * - Notas da banca: mostra (somente leitura) as notas e comentários dos
  *   avaliadores da banca para o grupo, por bimestre.
+ * - Materiais: slides das aulas da turma e modelo do trabalho escrito (só ver, abrir e baixar).
  * - Arquivos do projeto: envio do trabalho escrito (PDF), do pitch (vídeo) e
  *   da logo, com o botão "Salvar alterações".
  *
@@ -135,6 +138,8 @@ export default function Avaliacao() {
         <ProjetoArquivos grupoId={grupo.id} />
       ) : aba === 'banca' ? (
         <AvaliacaoBanca grupoId={grupo.id} />
+      ) : aba === 'materiais' ? (
+        <MateriaisConsulta mostrarAulas />
       ) : (
         <>
           <p className="text-sm text-text-muted">Avalie cada integrante de 0,00 a 0,20 por critério.</p>

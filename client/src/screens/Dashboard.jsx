@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardList, Loader2, LogOut } from 'lucide-react';
+import { ClipboardList, FolderOpen, Loader2, LogOut } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
 import Badge from '../components/ui/Badge.jsx';
@@ -9,6 +9,8 @@ import Mascot from '../components/ui/Mascot.jsx';
 import LogoEscola from '../components/LogoEscola.jsx';
 import ThemeToggle from '../components/ui/ThemeToggle.jsx';
 import PeriodosAvaliacao from '../components/PeriodosAvaliacao.jsx';
+import MateriaisProfessor from '../components/MateriaisProfessor.jsx';
+import MateriaisConsulta from '../components/MateriaisConsulta.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import Avaliacao from './Avaliacao.jsx';
@@ -16,9 +18,11 @@ import Avaliacao from './Avaliacao.jsx';
 /**
  * Painel principal.
  * - Professor: turmas (3A-3D) com até 5 grupos cada, com gestão e avaliação,
- *   e o painel para liberar o período de avaliação da banca.
- * - Avaliador da banca: as mesmas turmas e grupos, em modo consulta.
- * - Líder/Vice-Líder: avaliação e arquivos do próprio grupo.
+ *   o painel do período de avaliação da banca e a área de Materiais
+ *   (slides das aulas e modelo do trabalho escrito).
+ * - Avaliador da banca: as mesmas turmas e grupos, em modo consulta, e o
+ *   modelo do trabalho escrito.
+ * - Líder/Vice-Líder: avaliação, materiais e arquivos do próprio grupo.
  *
  * @returns {JSX.Element} Painel principal.
  */
@@ -28,10 +32,12 @@ export default function Dashboard() {
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
+  const [visao, setVisao] = useState('turmas'); // 'turmas' | 'materiais' (só professor)
 
   const token = session?.token;
   const role = session?.user?.role;
   const verTurmas = role === 'professor' || role === 'avaliador';
+  const mostrandoMateriais = role === 'professor' && visao === 'materiais';
 
   useEffect(() => {
     if (!verTurmas) return;
@@ -68,6 +74,49 @@ export default function Dashboard() {
   const titulo =
     role === 'professor' ? 'Painel do Professor' : role === 'avaliador' ? 'Painel do Avaliador' : 'Avaliação do Grupo';
 
+  /** Conteúdo principal, conforme o perfil e a visão escolhida. */
+  function conteudo() {
+    if (mostrandoMateriais) {
+      return <MateriaisProfessor />;
+    }
+
+    if (!verTurmas) {
+      return <Avaliacao />;
+    }
+
+    if (carregando) {
+      return (
+        <div className="flex justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      );
+    }
+
+    if (erro) {
+      return <Card className="p-8 text-center text-danger">{erro}</Card>;
+    }
+
+    return (
+      <>
+        <VisaoTurmas dados={dados} avaliador={role === 'avaliador'} />
+
+        {/* Período em que os avaliadores podem avaliar (só o professor define) */}
+        {role === 'professor' && (
+          <div className="mt-12">
+            <PeriodosAvaliacao />
+          </div>
+        )}
+
+        {/* Modelo do trabalho escrito (o avaliador só consulta) */}
+        {role === 'avaliador' && (
+          <div className="mt-12">
+            <MateriaisConsulta mostrarAulas={false} />
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-canvas">
       <header className="sticky top-0 z-10 border-b border-border bg-surface/80 backdrop-blur">
@@ -82,9 +131,18 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-2">
             {role === 'professor' && (
-              <Button variant="secondary" size="sm" onClick={() => navigate('/grupos')}>
-                <ClipboardList className="h-4 w-4" /> Cadastro de Grupos
-              </Button>
+              <>
+                <Button
+                  variant={mostrandoMateriais ? 'primary' : 'outline'}
+                  size="sm"
+                  onClick={() => setVisao(mostrandoMateriais ? 'turmas' : 'materiais')}
+                >
+                  <FolderOpen className="h-4 w-4" /> {mostrandoMateriais ? 'Turmas' : 'Materiais'}
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => navigate('/grupos')}>
+                  <ClipboardList className="h-4 w-4" /> Cadastro de Grupos
+                </Button>
+              </>
             )}
             <ThemeToggle />
             <Button variant="outline" size="sm" onClick={sair}>
@@ -94,30 +152,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-        {verTurmas ? (
-          carregando ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : erro ? (
-            <Card className="p-8 text-center text-danger">{erro}</Card>
-          ) : (
-            <>
-              <VisaoTurmas dados={dados} avaliador={role === 'avaliador'} />
-
-              {/* Período em que os avaliadores podem avaliar (só o professor define) */}
-              {role === 'professor' && (
-                <div className="mt-12">
-                  <PeriodosAvaliacao />
-                </div>
-              )}
-            </>
-          )
-        ) : (
-          <Avaliacao />
-        )}
-      </main>
+      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">{conteudo()}</main>
     </div>
   );
 }

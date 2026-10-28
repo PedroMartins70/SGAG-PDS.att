@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuth, requireRoles } from '../middlewares/auth.middleware.js';
+import materiaisRoutes from './materiais.routes.js';
 import {
   definirPeriodo,
   listarAvaliacoesBanca,
@@ -10,6 +11,10 @@ import {
 } from '../controllers/avaliacaoBanca.controller.js';
 
 const router = Router();
+
+// Materiais do professor (slides e modelo do trabalho): montados aqui para não
+// precisar mexer no routes/index.js
+router.use(materiaisRoutes);
 
 router.get('/grupos/:grupoId/avaliacoes-banca', requireAuth, listarAvaliacoesBanca);
 router.get('/grupos/:grupoId/avaliacoes-banca/historico', requireAuth, listarHistoricoBanca);
