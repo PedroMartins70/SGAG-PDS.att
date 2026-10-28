@@ -49,7 +49,8 @@ async function ultimasFalhas(campo, valor, desdeMs, limite) {
 }
 
 /**
- * Momento do último login bem-sucedido do e-mail (zera a contagem de falhas).
+ * Momento do último login bem-sucedido OU do último desbloqueio feito pelo
+ * professor (os dois zeram a contagem de falhas do e-mail).
  *
  * @param {string} email E-mail normalizado.
  * @returns {Promise<number>} Milissegundos (0 se nunca logou).
@@ -59,7 +60,7 @@ async function ultimoSucessoMs(email) {
     .from(TABELA)
     .select('created_at')
     .eq('email', email)
-    .eq('resultado', 'sucesso')
+    .in('resultado', ['sucesso', 'desbloqueio'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -129,7 +130,7 @@ function erroBloqueado(minutos) {
  *
  * @param {string} email E-mail normalizado.
  * @param {string} [ip] IP de origem.
- * @param {'falha'|'sucesso'} resultado Resultado da tentativa.
+ * @param {'falha'|'sucesso'|'desbloqueio'} resultado Resultado da tentativa.
  * @returns {Promise<Object|null>} Erro do banco, se houver.
  */
 async function gravar(email, ip, resultado) {
@@ -189,5 +190,20 @@ export async function registrarSucesso({ email, ip }) {
   const erro = await gravar(email, ip, 'sucesso');
   if (erro) {
     console.error('Erro ao registrar login bem-sucedido:', erro);
+  }
+}
+
+/**
+ * Libera o login de um e-mail que estava bloqueado por senhas erradas.
+ * Usado quando o professor redefine a senha da conta. Não apaga o histórico:
+ * só registra um "desbloqueio", e as falhas anteriores deixam de contar.
+ *
+ * @param {Object} params Parâmetros.
+ * @param {string} params.email E-mail normalizado.
+ */
+export async function liberarBloqueio({ email }) {
+  const erro = await gravar(email, null, 'desbloqueio');
+  if (erro) {
+    console.error('Erro ao registrar desbloqueio de login:', erro);
   }
 }

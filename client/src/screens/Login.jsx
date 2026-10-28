@@ -8,6 +8,7 @@ import ThemeToggle from '../components/ui/ThemeToggle.jsx';
 import { useAuth } from '../auth/AuthContext.jsx';
 import RoboBoasVindas from '../components/RoboBoasVindas.jsx';
 import LinkPrivacidade from '../components/PoliticaPrivacidade.jsx';
+import TrocarSenhaObrigatoria from '../components/TrocarSenhaObrigatoria.jsx';
 
 /**
  * Ícone de logo do SGAG-PDS (versão inline, sem dependências externas).
@@ -66,6 +67,9 @@ function IlustracaoLogin() {
  * Tela de login (primeira página). Autentica o usuário e redireciona ao painel.
  * Layout dividido: ilustração à esquerda, formulário à direita.
  *
+ * Quem entra com uma senha temporária (redefinida pelo professor) vê, no lugar do
+ * login, a tela que obriga a criar uma senha própria.
+ *
  * @returns {JSX.Element} Tela de login.
  */
 export default function Login() {
@@ -78,7 +82,8 @@ export default function Login() {
   const [carregando, setCarregando] = useState(false);
 
   useEffect(() => {
-    if (session) {
+    // Com senha temporária, não vai ao painel: antes precisa criar uma senha nova
+    if (session && !session.user?.senha_temporaria) {
       navigate('/dashboard');
     }
   }, [session, navigate]);
@@ -94,6 +99,11 @@ export default function Login() {
     } finally {
       setCarregando(false);
     }
+  }
+
+  // Senha temporária (redefinida pelo professor): obriga a criar uma nova antes de usar o sistema
+  if (session?.user?.senha_temporaria) {
+    return <TrocarSenhaObrigatoria />;
   }
 
   return (
@@ -186,7 +196,8 @@ export default function Login() {
               </Button>
             </div>
           </form>
-                    <p className="mt-4 text-center text-xs text-text-muted">
+
+          <p className="mt-4 text-center text-xs text-text-muted">
             Ao usar o sistema, você declara ter lido a <LinkPrivacidade />.
           </p>
         </Card>

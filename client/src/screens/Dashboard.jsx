@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { ClipboardList, FolderOpen, Loader2, LogOut } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
@@ -12,6 +12,7 @@ import PeriodosAvaliacao from '../components/PeriodosAvaliacao.jsx';
 import MateriaisProfessor from '../components/MateriaisProfessor.jsx';
 import MateriaisConsulta from '../components/MateriaisConsulta.jsx';
 import LinkPrivacidade from '../components/PoliticaPrivacidade.jsx';
+import AlterarSenha from '../components/TrocarSenha.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import Avaliacao from './Avaliacao.jsx';
@@ -70,6 +71,11 @@ export default function Dashboard() {
   function sair() {
     logout();
     navigate('/login');
+  }
+
+  // Senha temporária (redefinida pelo professor): precisa criar uma nova antes de usar o sistema
+  if (session?.user?.senha_temporaria) {
+    return <Navigate to="/login" replace />;
   }
 
   const titulo =
@@ -155,8 +161,9 @@ export default function Dashboard() {
 
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">{conteudo()}</main>
 
-      <footer className="mx-auto max-w-5xl px-4 pb-8 text-center text-xs text-text-muted sm:px-6">
+      <footer className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-4 gap-y-1 px-4 pb-8 text-center text-xs text-text-muted sm:px-6">
         <LinkPrivacidade />
+        <AlterarSenha />
       </footer>
     </div>
   );

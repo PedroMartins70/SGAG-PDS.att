@@ -24,6 +24,7 @@ import Input from '../components/ui/Input.jsx';
 import ThemeToggle from '../components/ui/ThemeToggle.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
+import ContasSenhas from '../components/ContasSenhas.jsx';
 
 /** Limites de negócio. */
 const LIMITE_GRUPOS = 5;
@@ -32,7 +33,9 @@ const LIMITE_INTEGRANTES = 7;
 /**
  * Página de cadastro de grupos (visão do Professor).
  * Permite criar até 5 grupos por turma, adicionar até 7 integrantes por grupo
- * e designar Líder e Vice-Líder. Intuitivo, seguindo a identidade Soft Dashboard.
+ * e designar Líder e Vice-Líder. Também tem o botão "Contas e senhas", para o
+ * professor gerar uma senha temporária para quem esqueceu a senha.
+ * Intuitivo, seguindo a identidade Soft Dashboard.
  *
  * @returns {JSX.Element} Página de cadastro de grupos.
  */
@@ -254,6 +257,8 @@ export default function Grupos() {
             <Button variant="outline" onClick={abrirPerfilModal}>
               <UserPlus className="h-4 w-4" /> Cadastrar Líder / Vice / Avaliador
             </Button>
+            {/* Gera senha temporária para quem esqueceu a senha */}
+            <ContasSenhas />
             <Button
               variant="success"
               onClick={() => navigate(`/grupos/novo/${turmaAtiva}`)}
