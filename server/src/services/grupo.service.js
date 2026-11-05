@@ -4,7 +4,7 @@ import { registrarAuditoria } from '../utils/audit.js';
 import { urlsDasLogos } from './arquivo.service.js';
 
 /** Limite máximo de grupos por turma (regra de negócio). */
-export const LIMITE_GRUPOS_POR_TURMA = 5;
+export const LIMITE_GRUPOS_POR_TURMA = 7;
 
 /** Limite máximo de integrantes por grupo (regra de negócio). */
 export const LIMITE_INTEGRANTES_POR_GRUPO = 7;
@@ -120,7 +120,7 @@ export async function listarGruposDaTurma(turmaId) {
 }
 
 /**
- * Cria um novo grupo na turma, respeitando o limite máximo de 5 grupos.
+ * Cria um novo grupo na turma, respeitando o limite máximo de 7 grupos.
  *
  * @param {Object} params Parâmetros de criação.
  * @param {string} params.turmaId UUID da turma.
@@ -512,7 +512,7 @@ export async function obterMeuGrupo(userId) {
  * Cria um grupo de forma completa: define Líder, Vice-Líder e adiciona
  * os integrantes de uma única vez (fluxo "Novo Grupo").
  *
- * Respeita os limites: máx. 5 grupos por turma e máx. 7 integrantes por grupo.
+ * Respeita os limites: máx. 7 grupos por turma e máx. 7 integrantes por grupo.
  * O Líder e o Vice-Líder devem ser perfis já cadastrados com os papéis corretos.
  *
  * @param {Object} params Parâmetros da criação.

@@ -54,7 +54,7 @@ export const obterGrupoDetalhado = asyncHandler(async (req, res) => {
 });
 
 /**
- * POST /api/turmas/:turmaId/grupos — Cria grupo (professor). Valida limite de 5.
+ * POST /api/turmas/:turmaId/grupos — Cria grupo (professor). Valida limite de 7.
  */
 export const criarGrupo = asyncHandler(async (req, res) => {
   const { turmaId } = req.params;

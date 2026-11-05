@@ -104,17 +104,17 @@ describe('Página de Cadastro de Grupos', () => {
     expect(screen.getAllByText('Turma 3B').length).toBeGreaterThan(0);
   });
 
-  it('desabilita "Novo grupo" e mostra aviso quando a turma atinge 5 grupos', async () => {
-    const gruposT1 = [1, 2, 3, 4, 5].map((n) => grupo(`g${n}`, `Grupo ${n}`));
+  it('desabilita "Novo grupo" e mostra aviso quando a turma atinge 7 grupos', async () => {
+    const gruposT1 = [1, 2, 3, 4, 5, 6, 7].map((n) => grupo(`g${n}`, `Grupo ${n}`));
     mockFetch({ gruposT1 });
 
     renderizar();
 
     await waitFor(() => expect(screen.getByRole('button', { name: /novo grupo/i })).toBeDisabled());
-    expect(screen.getByText(/limite de 5 grupos atingido/i)).toBeInTheDocument();
+    expect(screen.getByText(/limite de 7 grupos atingido/i)).toBeInTheDocument();
   });
 
-  it('habilita o botao "Novo grupo" quando a turma tem menos de 5 grupos', async () => {
+  it('habilita o botao "Novo grupo" quando a turma tem menos de 7 grupos', async () => {
     const gruposT1 = [grupo('g1', 'Grupo 1')];
     mockFetch({ gruposT1 });
 
