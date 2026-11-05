@@ -73,6 +73,25 @@ async function buscarPerfil(perfilId) {
 }
 
 /**
+ * Garante que quem executa a ação pode mexer neste grupo.
+ * Professor: qualquer grupo. Líder/Vice-Líder: somente o grupo em que
+ * é líder ou vice.
+ *
+ * @param {Object} grupo Grupo (com lider_id e vice_lider_id).
+ * @param {string} executorId UUID de quem executa a ação.
+ * @param {string} papel Papel de quem executa (professor, lider, vice_lider).
+ * @throws {AppError} 403 se o usuário não for do grupo.
+ */
+function garantirAcessoAoGrupo(grupo, executorId, papel) {
+  if (papel === 'professor') return;
+
+  const ehDoGrupo = grupo.lider_id === executorId || grupo.vice_lider_id === executorId;
+  if (!ehDoGrupo) {
+    throw new AppError(403, 'Voce so pode alterar o seu proprio grupo');
+  }
+}
+
+/**
  * Lista os grupos de uma turma com líder, vice-líder, integrantes e logo.
  *
  * @param {string} turmaId UUID da turma.
@@ -202,16 +221,20 @@ export async function excluirGrupo({ grupoId, professorId }) {
 /**
  * Adiciona um integrante (aluno comum, sem conta) ao grupo,
  * respeitando o limite máximo de 7 integrantes.
+ * Pode ser feito pelo professor (qualquer grupo) ou pelo líder/vice-líder
+ * (somente do próprio grupo).
  *
  * @param {Object} params Parâmetros de adição.
  * @param {string} params.grupoId UUID do grupo.
  * @param {string} params.nomeAluno Nome do aluno.
- * @param {string} params.professorId UUID do professor executor.
+ * @param {string} params.professorId UUID de quem executa (professor, líder ou vice).
+ * @param {string} [params.papel='professor'] Papel de quem executa.
  * @returns {Promise<Object>} Integrante criado.
  * @throws {AppError} 400 se o grupo já atingir o limite de integrantes.
  */
-export async function adicionarIntegrante({ grupoId, nomeAluno, professorId }) {
-  await buscarGrupo(grupoId);
+export async function adicionarIntegrante({ grupoId, nomeAluno, professorId, papel = 'professor' }) {
+  const grupo = await buscarGrupo(grupoId);
+  garantirAcessoAoGrupo(grupo, professorId, papel);
 
   const { count, error: countError } = await supabaseAdmin
     .from('integrantes')

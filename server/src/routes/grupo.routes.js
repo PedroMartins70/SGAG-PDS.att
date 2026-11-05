@@ -25,7 +25,7 @@ router.get('/grupos/:grupoId', requireAuth, requireRoles('professor', 'avaliador
 router.post('/turmas/:turmaId/grupos', requireAuth, requireRoles('professor'), criarGrupo);
 router.put('/grupos/:grupoId', requireAuth, requireRoles('professor'), renomearGrupo);
 router.delete('/grupos/:grupoId', requireAuth, requireRoles('professor'), excluirGrupo);
-router.post('/grupos/:grupoId/integrantes', requireAuth, requireRoles('professor'), adicionarIntegrante);
+router.post('/grupos/:grupoId/integrantes', requireAuth, requireRoles('professor', 'lider', 'vice_lider'), adicionarIntegrante);
 router.delete('/grupos/:grupoId/integrantes/:integranteId', requireAuth, requireRoles('professor'), removerIntegrante);
 router.put('/grupos/:grupoId/integrantes/:integranteId', requireAuth, requireRoles('professor'), renomearIntegrante);
 router.put('/grupos/:grupoId/lider', requireAuth, requireRoles('professor'), designarLider);

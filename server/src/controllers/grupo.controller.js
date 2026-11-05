@@ -83,7 +83,8 @@ export const excluirGrupo = asyncHandler(async (req, res) => {
 });
 
 /**
- * POST /api/grupos/:grupoId/integrantes — Adiciona integrante (professor). Valida limite de 7.
+ * POST /api/grupos/:grupoId/integrantes — Adiciona integrante (professor, líder ou
+ * vice-líder do grupo). Valida limite de 7.
  */
 export const adicionarIntegrante = asyncHandler(async (req, res) => {
   const { grupoId } = req.params;
@@ -92,6 +93,7 @@ export const adicionarIntegrante = asyncHandler(async (req, res) => {
     grupoId,
     nomeAluno: dados.nome_aluno,
     professorId: req.user.id,
+    papel: req.user.role,
   });
   res.status(201).json({ integrante });
 });

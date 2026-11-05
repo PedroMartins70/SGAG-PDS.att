@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, Clock, Loader2, Lock, Save, UserX } from 'lucide-react';
+import { Check, Clock, Loader2, Lock, Save, UserPlus, UserX } from 'lucide-react';
 import Badge from '../components/ui/Badge.jsx';
 import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
 import Avatar from '../components/ui/Avatar.jsx';
+import Input from '../components/ui/Input.jsx';
+import Modal from '../components/ui/Modal.jsx';
 import ProjetoArquivos from '../components/ProjetoArquivos.jsx';
 import AvaliacaoBanca from '../components/AvaliacaoBanca.jsx';
 import MateriaisConsulta from '../components/MateriaisConsulta.jsx';
@@ -23,6 +25,9 @@ const CRITERIOS = [
 /** Bimestres disponíveis para seleção. */
 const BIMESTRES = [1, 2, 3, 4];
 
+/** Limite de integrantes por grupo (igual ao do servidor). */
+const LIMITE_INTEGRANTES = 7;
+
 /** Abas da tela. */
 const ABAS = [
   { key: 'avaliacoes', rotulo: 'Avaliações' },
@@ -38,7 +43,8 @@ const vazio = () => Object.fromEntries(CRITERIOS.map((c) => [c.key, '']));
  * Tela do Líder/Vice-Líder sobre o seu grupo, com quatro abas:
  * - Avaliações: avalia cada integrante por bimestre (5 critérios, nota máxima
  *   1,00, comentário opcional). Uma avaliação já alterada pelo professor fica
- *   travada para o Líder/Vice-Líder.
+ *   travada para o Líder/Vice-Líder. Também permite adicionar integrantes
+ *   ao próprio grupo (até 7).
  * - Notas da banca: mostra (somente leitura) as notas e comentários dos
  *   avaliadores da banca para o grupo, por bimestre.
  * - Materiais: slides das aulas da turma e modelo do trabalho escrito (só ver, abrir e baixar).
@@ -61,6 +67,12 @@ export default function Avaliacao() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
 
+  // Adição de integrantes pelo líder/vice
+  const [modalAdd, setModalAdd] = useState(false);
+  const [novoNome, setNovoNome] = useState('');
+  const [adicionando, setAdicionando] = useState(false);
+  const [erroAdd, setErroAdd] = useState('');
+
   /** Carrega o grupo do usuário e o estado das avaliações no bimestre atual. */
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -81,6 +93,26 @@ export default function Avaliacao() {
   useEffect(() => {
     carregar();
   }, [carregar]);
+
+  /** Adiciona um integrante ao grupo do líder/vice. */
+  async function adicionarIntegrante() {
+    setAdicionando(true);
+    setErroAdd('');
+    try {
+      await api(`/grupos/${grupo.id}/integrantes`, {
+        method: 'POST',
+        token,
+        body: { nome_aluno: novoNome.trim() },
+      });
+      setModalAdd(false);
+      setNovoNome('');
+      await carregar();
+    } catch (e) {
+      setErroAdd(e.message || 'Falha ao adicionar integrante.');
+    } finally {
+      setAdicionando(false);
+    }
+  }
 
   if (carregando && !grupo) {
     return (
@@ -142,7 +174,21 @@ export default function Avaliacao() {
         <MateriaisConsulta mostrarAulas />
       ) : (
         <>
-          <p className="text-sm text-text-muted">Avalie cada integrante de 0,00 a 0,20 por critério.</p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-text-muted">Avalie cada integrante de 0,00 a 0,20 por critério.</p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setErroAdd('');
+                setNovoNome('');
+                setModalAdd(true);
+              }}
+              disabled={integrantes.length >= LIMITE_INTEGRANTES}
+            >
+              <UserPlus className="h-4 w-4" /> Adicionar integrante ({integrantes.length}/{LIMITE_INTEGRANTES})
+            </Button>
+          </div>
 
           {/* Seletor de bimestre */}
           <div className="flex items-center gap-2">
@@ -220,6 +266,29 @@ export default function Avaliacao() {
           )}
         </>
       )}
+
+      {/* Modal: adicionar integrante ao grupo */}
+      <Modal open={modalAdd} onClose={() => setModalAdd(false)} title="Adicionar integrante">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            adicionarIntegrante();
+          }}
+          className="space-y-4"
+        >
+          <Input
+            label="Nome do aluno"
+            value={novoNome}
+            onChange={(e) => setNovoNome(e.target.value)}
+            required
+            autoFocus
+          />
+          {erroAdd && <p className="text-sm font-medium text-danger">{erroAdd}</p>}
+          <Button type="submit" className="w-full" disabled={!novoNome.trim() || adicionando}>
+            {adicionando ? 'Adicionando...' : 'Adicionar'}
+          </Button>
+        </form>
+      </Modal>
     </div>
   );
 }
