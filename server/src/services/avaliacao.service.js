@@ -96,7 +96,7 @@ function calcularPermissao(grupo, avaliacoesDoBimestre, usuario, viceLiberado = 
     } else if (!viceLiberado) {
       podeEditar = false;
       motivo =
-        'Somente o lider avalia neste bimestre. Formulario em modo somente leitura até o professor liberar a avaliacao para o vice-lider.';
+        'Somente o lider avalia neste bimestre. Formulário em modo leitura até o professor liberar a avaliação para o vice-líder.';
     }
   } else {
     motivo = 'Perfil sem permissao para avaliar';
