@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, Clock, Loader2, Lock, Save, UserPlus, UserX } from 'lucide-react';
+import { Check, Clock, Loader2, Lock, Save, Unlock, UserPlus, UserX } from 'lucide-react';
 import Badge from '../components/ui/Badge.jsx';
 import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
@@ -42,9 +42,11 @@ const vazio = () => Object.fromEntries(CRITERIOS.map((c) => [c.key, '']));
 /**
  * Tela do Líder/Vice-Líder sobre o seu grupo, com quatro abas:
  * - Avaliações: avalia cada integrante por bimestre (5 critérios, nota máxima
- *   1,00, comentário opcional). Uma avaliação já alterada pelo professor fica
- *   travada para o Líder/Vice-Líder. Também permite adicionar integrantes
- *   ao próprio grupo (até 7).
+ *   1,00, comentário opcional). Só o Líder avalia; o Vice fica em modo somente
+ *   leitura até o Professor liberar a avaliação daquele bimestre. Mesmo
+ *   liberado, o Vice não altera notas que o Líder já deu. Uma avaliação já
+ *   alterada pelo professor fica travada para o Líder/Vice-Líder. Também
+ *   permite adicionar integrantes ao próprio grupo (até 7).
  * - Notas da banca: mostra (somente leitura) as notas e comentários dos
  *   avaliadores da banca para o grupo, por bimestre.
  * - Materiais: slides das aulas da turma e modelo do trabalho escrito (só ver, abrir e baixar).
@@ -58,6 +60,7 @@ export default function Avaliacao() {
   const navigate = useNavigate();
   const token = session?.token;
   const nomeUsuario = session?.user?.nome || '';
+  const ehVice = session?.user?.role === 'vice_lider';
 
   const [aba, setAba] = useState('avaliacoes');
   const [grupo, setGrupo] = useState(null);
@@ -218,6 +221,15 @@ export default function Avaliacao() {
             </div>
           )}
 
+          {/* Aviso para o Vice quando o professor liberou o bimestre */}
+          {ehVice && permissao?.podeEditar && (
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm font-medium text-text">
+              <Unlock className="h-4 w-4 shrink-0 text-success" />
+              O professor liberou a avaliação do {bimestre}º bimestre para você. Notas que o líder já deu não podem
+              ser alteradas.
+            </div>
+          )}
+
           {/* Lista de avaliação */}
           {integrantes.length === 0 ? (
             <Card className="p-8 text-center text-text-muted">Nenhum integrante no grupo.</Card>
@@ -226,6 +238,8 @@ export default function Avaliacao() {
               {integrantes.map((integrante) => {
                 const ehVoce = nomeUsuario && integrante.nome_aluno === nomeUsuario;
                 const travadoPeloProfessor = integrante.avaliacao?.alterado_por_professor ?? false;
+                const travadoPeloLider =
+                  ehVice && !travadoPeloProfessor && integrante.avaliacao?.avaliador_id === grupo.lider_id;
                 return (
                   <Card key={integrante.id} className="p-5">
                     <div className="mb-4 flex items-center gap-3">
@@ -250,13 +264,20 @@ export default function Avaliacao() {
                       </div>
                     )}
 
+                    {travadoPeloLider && (
+                      <div className="mb-3 flex items-center gap-2 rounded-lg border border-warning-soft bg-warning-soft px-3 py-2 text-sm font-medium text-warning">
+                        <Lock className="h-4 w-4 shrink-0" />
+                        Esta nota foi dada pelo líder e não pode ser alterada pelo vice.
+                      </div>
+                    )}
+
                     <AvaliaIntegrante
                       integranteId={integrante.id}
                       grupoId={grupo.id}
                       bimestre={bimestre}
                       valoresIniciais={integrante.avaliacao ? deAvaliacao(integrante.avaliacao) : vazio()}
                       comentarioInicial={integrante.avaliacao?.comentario_esclarecimento ?? ''}
-                      podeEditar={(permissao?.podeEditar ?? false) && !travadoPeloProfessor}
+                      podeEditar={(permissao?.podeEditar ?? false) && !travadoPeloProfessor && !travadoPeloLider}
                       onSalva={carregar}
                     />
                   </Card>

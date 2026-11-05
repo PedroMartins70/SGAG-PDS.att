@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { asyncHandler } from '../middlewares/error.middleware.js';
 import * as arquivoService from '../services/arquivo.service.js';
+import { garantirAvaliadorNoGrupo } from '../services/avaliador.service.js';
 
 /** Bimestre: 1 a 4 para trabalho e pitch (a logo ignora este campo). */
 const bimestreSchema = z.number().int().min(0).max(4).optional();
@@ -29,9 +30,11 @@ const linkSchema = z.object({
  * GET /api/grupos/:grupoId/arquivos?bimestre=1 — Lista os arquivos do grupo
  * para um bimestre (trabalho e pitch daquele bimestre + logo do projeto).
  * Professor e avaliador só leem; líder/vice leem e enviam.
+ * O avaliador só vê arquivos de grupos das turmas às quais foi vinculado.
  */
 export const listarArquivos = asyncHandler(async (req, res) => {
   const { grupoId } = req.params;
+  await garantirAvaliadorNoGrupo(req.user, grupoId);
   const consulta = Number(req.query.bimestre);
   const bimestre = Number.isInteger(consulta) && consulta >= 1 && consulta <= 4 ? consulta : 1;
   const resultado = await arquivoService.listarArquivos({ grupoId, bimestre, usuario: req.user });

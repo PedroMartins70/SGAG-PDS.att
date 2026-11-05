@@ -9,6 +9,7 @@ import Mascot from '../components/ui/Mascot.jsx';
 import LogoEscola from '../components/LogoEscola.jsx';
 import ThemeToggle from '../components/ui/ThemeToggle.jsx';
 import PeriodosAvaliacao from '../components/PeriodosAvaliacao.jsx';
+import AvaliadoresTurmas from '../components/AvaliadoresTurmas.jsx';
 import MateriaisProfessor from '../components/MateriaisProfessor.jsx';
 import MateriaisConsulta from '../components/MateriaisConsulta.jsx';
 import LinkPrivacidade from '../components/PoliticaPrivacidade.jsx';
@@ -19,11 +20,11 @@ import Avaliacao from './Avaliacao.jsx';
 
 /**
  * Painel principal.
- * - Professor: turmas (3A-3D) com até 5 grupos cada, com gestão e avaliação,
- *   o painel do período de avaliação da banca e a área de Materiais
- *   (slides das aulas e modelo do trabalho escrito).
- * - Avaliador da banca: as mesmas turmas e grupos, em modo consulta, e o
- *   modelo do trabalho escrito.
+ * - Professor: turmas (3A-3D) com até 7 grupos cada, com gestão e avaliação,
+ *   o quadro "Avaliadores e turmas", o painel do período de avaliação da banca
+ *   e a área de Materiais (slides das aulas e modelo do trabalho escrito).
+ * - Avaliador da banca: só as turmas às quais foi vinculado e seus grupos, em
+ *   modo consulta, e o modelo do trabalho escrito.
  * - Líder/Vice-Líder: avaliação, materiais e arquivos do próprio grupo.
  *
  * @returns {JSX.Element} Painel principal.
@@ -49,7 +50,9 @@ export default function Dashboard() {
       setCarregando(true);
       setErro('');
       try {
-        const { turmas } = await api('/turmas', { token });
+        // O avaliador só recebe as turmas às quais o professor o vinculou
+        const rotaTurmas = role === 'avaliador' ? '/profiles/minhas-turmas' : '/turmas';
+        const { turmas } = await api(rotaTurmas, { token });
         const gruposPorTurma = {};
         for (const turma of turmas) {
           const { grupos } = await api(`/turmas/${turma.id}/grupos`, { token });
@@ -66,7 +69,7 @@ export default function Dashboard() {
     return () => {
       ativo = false;
     };
-  }, [verTurmas, token]);
+  }, [verTurmas, token, role]);
 
   function sair() {
     logout();
@@ -106,6 +109,13 @@ export default function Dashboard() {
     return (
       <>
         <VisaoTurmas dados={dados} avaliador={role === 'avaliador'} />
+
+        {/* Quadro de avaliadores e das turmas de cada um (só o professor define) */}
+        {role === 'professor' && (
+          <div className="mt-12">
+            <AvaliadoresTurmas turmas={dados?.turmas ?? []} />
+          </div>
+        )}
 
         {/* Período em que os avaliadores podem avaliar (só o professor define) */}
         {role === 'professor' && (
@@ -170,9 +180,10 @@ export default function Dashboard() {
 }
 
 /**
- * Visão de turmas 3A-3D, cada uma com até 5 grupos. Cada grupo mostra a logo
+ * Visão de turmas 3A-3D, cada uma com até 7 grupos. Cada grupo mostra a logo
  * enviada pelo líder/vice (ou a inicial do nome). O clique leva à tela de
  * detalhe do professor ou à tela de consulta do avaliador.
+ * O avaliador vê apenas as turmas às quais foi vinculado.
  *
  * @param {Object} props Propriedades da visão.
  * @param {Object} props.dados Dados carregados (turmas e grupos por turma).
@@ -191,6 +202,13 @@ function VisaoTurmas({ dados, avaliador }) {
           ? 'Clique em um grupo para ver as notas, os arquivos e o histórico.'
           : 'Clique em um grupo para ver detalhes e avaliações.'}
       </p>
+
+      {avaliador && turmas.length === 0 && (
+        <Card className="p-8 text-center text-text-muted">
+          Você ainda não foi vinculado a nenhuma turma. Fale com o professor para liberar o acesso.
+        </Card>
+      )}
+
       <div className="grid gap-5 sm:grid-cols-2">
         {turmas.map((turma) => {
           const grupos = dados?.gruposPorTurma?.[turma.id] ?? [];

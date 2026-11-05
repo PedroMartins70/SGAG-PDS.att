@@ -30,11 +30,15 @@ import ContasSenhas from '../components/ContasSenhas.jsx';
 const LIMITE_GRUPOS = 7;
 const LIMITE_INTEGRANTES = 7;
 
+/** Estado inicial do formulário de cadastro de Líder/Vice/Avaliador. */
+const PERFIL_VAZIO = { email: '', nome: '', senha: '', role: 'lider', turmaIds: [] };
+
 /**
  * Página de cadastro de grupos (visão do Professor).
  * Permite criar até 7 grupos por turma, adicionar até 7 integrantes por grupo
  * e designar Líder e Vice-Líder. Também tem o botão "Contas e senhas", para o
  * professor gerar uma senha temporária para quem esqueceu a senha.
+ * No cadastro de Avaliador, o professor escolhe as turmas que ele poderá ver.
  * Intuitivo, seguindo a identidade Soft Dashboard.
  *
  * @returns {JSX.Element} Página de cadastro de grupos.
@@ -50,9 +54,10 @@ export default function Grupos() {
   const [turmaAtiva, setTurmaAtiva] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
+  const [erroPerfil, setErroPerfil] = useState('');
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({ nome: '', integrante: '', perfilId: '' });
-  const [formPerfil, setFormPerfil] = useState({ email: '', nome: '', senha: '', role: 'lider' });
+  const [formPerfil, setFormPerfil] = useState(PERFIL_VAZIO);
 
   /**
    * Carrega turmas, perfis (líderes/vices) e os grupos de cada turma.
@@ -108,29 +113,47 @@ export default function Grupos() {
     setModal({ tipo, ...contexto });
   }
 
-  /** Abre o modal de cadastro de Líder/Vice-Líder. */
+  /** Abre o modal de cadastro de Líder/Vice-Líder/Avaliador. */
   function abrirPerfilModal() {
-    setFormPerfil({ email: '', nome: '', senha: '', role: 'lider' });
+    setFormPerfil(PERFIL_VAZIO);
+    setErroPerfil('');
     setModal({ tipo: 'perfil' });
   }
 
+  /** Marca ou desmarca uma turma do avaliador no formulário de cadastro. */
+  function alternarTurma(turmaId) {
+    setFormPerfil((atual) => ({
+      ...atual,
+      turmaIds: atual.turmaIds.includes(turmaId)
+        ? atual.turmaIds.filter((id) => id !== turmaId)
+        : [...atual.turmaIds, turmaId],
+    }));
+  }
+
   /**
-   * Cadastra um Líder ou Vice-Líder (gmail, nome, senha) pelo Professor.
+   * Cadastra um Líder, Vice-Líder ou Avaliador (gmail, nome, senha) pelo Professor.
+   * Para o Avaliador, envia também as turmas escolhidas (turma_ids).
    */
   async function cadastrarPerfil() {
-    await api('/profiles', {
-      method: 'POST',
-      body: {
-        email: formPerfil.email,
-        nome: formPerfil.nome,
-        senha: formPerfil.senha,
-        role: formPerfil.role,
-      },
-      token,
-    });
-    setModal(null);
-    const { perfis } = await api('/profiles', { token });
-    setPerfis(perfis);
+    setErroPerfil('');
+    try {
+      await api('/profiles', {
+        method: 'POST',
+        body: {
+          email: formPerfil.email,
+          nome: formPerfil.nome,
+          senha: formPerfil.senha,
+          role: formPerfil.role,
+          ...(formPerfil.role === 'avaliador' ? { turma_ids: formPerfil.turmaIds } : {}),
+        },
+        token,
+      });
+      setModal(null);
+      const { perfis } = await api('/profiles', { token });
+      setPerfis(perfis);
+    } catch (e) {
+      setErroPerfil(e.message || 'Nao foi possivel cadastrar o perfil.');
+    }
   }
 
   function sair() {
@@ -193,6 +216,8 @@ export default function Grupos() {
       </div>
     );
   }
+
+  const avaliadorSemTurma = formPerfil.role === 'avaliador' && formPerfil.turmaIds.length === 0;
 
   return (
     <div className="min-h-screen bg-canvas">
@@ -421,10 +446,48 @@ export default function Grupos() {
               ))}
             </div>
           </div>
+
+          {/* Turmas: só aparecem quando o papel escolhido é Avaliador */}
+          {formPerfil.role === 'avaliador' && (
+            <div>
+              <span className="mb-1.5 block text-sm font-semibold text-text">Turmas que ele vai avaliar</span>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {turmas.map((turma) => {
+                  const marcada = formPerfil.turmaIds.includes(turma.id);
+                  return (
+                    <label
+                      key={turma.id}
+                      className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+                        marcada
+                          ? 'border-primary bg-primary-soft text-primary'
+                          : 'border-border bg-surface text-text-muted hover:bg-surface-muted'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={marcada}
+                        onChange={() => alternarTurma(turma.id)}
+                        className="h-4 w-4 accent-primary"
+                      />
+                      Turma {turma.nome}
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-xs text-text-muted">
+                O avaliador só verá os projetos das turmas marcadas. Marque pelo menos uma.
+              </p>
+            </div>
+          )}
+
+          {erroPerfil && <p className="text-sm font-medium text-danger">{erroPerfil}</p>}
+
           <Button
             type="submit"
             className="w-full"
-            disabled={!formPerfil.email.trim() || !formPerfil.nome.trim() || !formPerfil.senha.trim()}
+            disabled={
+              !formPerfil.email.trim() || !formPerfil.nome.trim() || !formPerfil.senha.trim() || avaliadorSemTurma
+            }
           >
             Cadastrar
           </Button>

@@ -4,9 +4,12 @@ import {
   criarGrupoCompletoSchema,
   criarGrupoSchema,
   designarPapelSchema,
+  liberacaoViceSchema,
   renomearGrupoSchema,
 } from '../validations/schemas.js';
 import * as grupoService from '../services/grupo.service.js';
+import * as liberacaoViceService from '../services/liberacaoVice.service.js';
+import { garantirAvaliadorNaTurma, garantirAvaliadorNoGrupo } from '../services/avaliador.service.js';
 
 /**
  * POST /api/grupos/novo — Cria um grupo completo (nome, líder, vice e integrantes).
@@ -26,9 +29,11 @@ export const criarGrupoCompleto = asyncHandler(async (req, res) => {
 
 /**
  * GET /api/turmas/:turmaId/grupos — Lista os grupos de uma turma.
+ * Avaliador só consegue listar as turmas às quais foi vinculado.
  */
 export const listarGrupos = asyncHandler(async (req, res) => {
   const { turmaId } = req.params;
+  await garantirAvaliadorNaTurma(req.user, turmaId);
   const grupos = await grupoService.listarGruposDaTurma(turmaId);
   res.json({ grupos });
 });
@@ -44,12 +49,19 @@ export const obterMeuGrupo = asyncHandler(async (req, res) => {
 /**
  * GET /api/grupos/:grupoId?bimestre=1 — Detalhe do grupo (página de
  * expansão do professor), filtrado por bimestre (padrão: 1).
+ * Avaliador só consegue abrir grupos das turmas às quais foi vinculado.
+ * Para o professor, a resposta inclui vice_liberado: se a avaliação do
+ * vice-líder está liberada neste bimestre.
  */
 export const obterGrupoDetalhado = asyncHandler(async (req, res) => {
   const { grupoId } = req.params;
+  await garantirAvaliadorNoGrupo(req.user, grupoId);
   const bimestreQuery = Number(req.query.bimestre);
   const bimestre = Number.isInteger(bimestreQuery) && bimestreQuery >= 1 && bimestreQuery <= 4 ? bimestreQuery : 1;
   const grupo = await grupoService.obterGrupoDetalhado(grupoId, bimestre);
+  if (req.user.role === 'professor') {
+    grupo.vice_liberado = await liberacaoViceService.viceEstaLiberado(grupoId, bimestre);
+  }
   res.json({ grupo });
 });
 
@@ -149,6 +161,23 @@ export const designarViceLider = asyncHandler(async (req, res) => {
   const resultado = await grupoService.designarViceLider({
     grupoId,
     perfilId: dados.perfil_id,
+    professorId: req.user.id,
+  });
+  res.json(resultado);
+});
+
+/**
+ * PUT /api/grupos/:grupoId/liberacao-vice — Libera ou retira a liberação da
+ * avaliação do Vice-Líder em um bimestre (professor).
+ * Corpo: { bimestre: 1..4, liberado: true | false }.
+ */
+export const definirLiberacaoVice = asyncHandler(async (req, res) => {
+  const { grupoId } = req.params;
+  const dados = liberacaoViceSchema.parse(req.body);
+  const resultado = await liberacaoViceService.definirLiberacaoVice({
+    grupoId,
+    bimestre: dados.bimestre,
+    liberado: dados.liberado,
     professorId: req.user.id,
   });
   res.json(resultado);

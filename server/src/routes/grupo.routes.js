@@ -4,6 +4,7 @@ import {
   adicionarIntegrante,
   criarGrupo,
   criarGrupoCompleto,
+  definirLiberacaoVice,
   designarLider,
   designarViceLider,
   excluirGrupo,
@@ -30,5 +31,7 @@ router.delete('/grupos/:grupoId/integrantes/:integranteId', requireAuth, require
 router.put('/grupos/:grupoId/integrantes/:integranteId', requireAuth, requireRoles('professor'), renomearIntegrante);
 router.put('/grupos/:grupoId/lider', requireAuth, requireRoles('professor'), designarLider);
 router.put('/grupos/:grupoId/vice-lider', requireAuth, requireRoles('professor'), designarViceLider);
+// Professor libera (ou retira) a avaliação do vice-líder em um bimestre
+router.put('/grupos/:grupoId/liberacao-vice', requireAuth, requireRoles('professor'), definirLiberacaoVice);
 
 export default router;

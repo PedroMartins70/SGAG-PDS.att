@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import { registrarAuditoria } from '../utils/audit.js';
+import { viceEstaLiberado } from './liberacaoVice.service.js';
 
 /**
  * Busca um grupo e garante que ele existe.
@@ -68,15 +69,16 @@ function validarBimestre(bimestre) {
  * - Professor: sempre pode editar.
  * - Líder: pode editar (se for o líder do grupo), exceto avaliações já
  *   alteradas pelo professor (controlado individualmente por integrante).
- * - Vice-Líder: pode editar apenas se o Líder ainda não tiver submetido
- *   neste bimestre.
+ * - Vice-Líder: SÓ pode editar se o Professor tiver liberado a avaliação
+ *   deste bimestre para o grupo (caso o líder não possa avaliar).
  *
  * @param {Object} grupo Grupo consultado.
  * @param {Object[]} avaliacoesDoBimestre Avaliações existentes do grupo neste bimestre.
  * @param {Object} usuario Usuário autenticado.
- * @returns {{podeEditar: boolean, motivo: string|null, liderSubmeteu: boolean}} Resultado da análise.
+ * @param {boolean} viceLiberado true se o professor liberou o vice neste bimestre.
+ * @returns {{podeEditar: boolean, motivo: string|null, liderSubmeteu: boolean, viceLiberado: boolean}} Resultado da análise.
  */
-function calcularPermissao(grupo, avaliacoesDoBimestre, usuario) {
+function calcularPermissao(grupo, avaliacoesDoBimestre, usuario, viceLiberado = false) {
   const liderSubmeteu = avaliacoesDoBimestre.some((a) => a.avaliador_id === grupo.lider_id);
 
   let podeEditar = false;
@@ -91,15 +93,16 @@ function calcularPermissao(grupo, avaliacoesDoBimestre, usuario) {
     podeEditar = usuario.id === grupo.vice_lider_id;
     if (!podeEditar) {
       motivo = 'Voce nao e o vice-lider deste grupo';
-    } else if (liderSubmeteu) {
+    } else if (!viceLiberado) {
       podeEditar = false;
-      motivo = 'O lider ja submeteu as notas; formulario em modo somente leitura';
+      motivo =
+        'Somente o lider avalia neste bimestre. Formulario em modo somente leitura até o professor liberar a avaliacao para o vice-lider.';
     }
   } else {
     motivo = 'Perfil sem permissao para avaliar';
   }
 
-  return { podeEditar, motivo, liderSubmeteu };
+  return { podeEditar, motivo, liderSubmeteu, viceLiberado };
 }
 
 /**
@@ -129,11 +132,15 @@ export async function listarAvaliacoes(grupoId, usuario, bimestre = 1) {
     avaliacao: resultAvaliacoes.data.find((a) => a.integrante_id === integrante.id) ?? null,
   }));
 
+  // A liberação só importa para o vice (o professor e o líder não dependem dela)
+  const viceLiberado =
+    usuario.role === 'vice_lider' ? await viceEstaLiberado(grupoId, bimestreValido) : false;
+
   return {
     grupo: { id: grupo.id, turma_id: grupo.turma_id, nome: grupo.nome, lider_id: grupo.lider_id, vice_lider_id: grupo.vice_lider_id },
     bimestre: bimestreValido,
     integrantes,
-    permissao: calcularPermissao(grupo, resultAvaliacoes.data, usuario),
+    permissao: calcularPermissao(grupo, resultAvaliacoes.data, usuario, viceLiberado),
   };
 }
 
@@ -141,11 +148,12 @@ export async function listarAvaliacoes(grupoId, usuario, bimestre = 1) {
  * Submete (cria ou atualiza) a avaliação individual de um integrante em
  * um bimestre específico.
  *
- * Trava de concorrência Líder vs. Vice-Líder:
- * - O Líder tem prioridade e pode submeter/sobrescrever a qualquer momento
- *   (enquanto o professor não tiver alterado a nota).
- * - O Vice-Líder só pode submeter se o Líder ainda não tiver submetido
- *   neste bimestre.
+ * Quem avalia:
+ * - O Líder avalia a qualquer momento (enquanto o professor não tiver
+ *   alterado a nota).
+ * - O Vice-Líder SÓ avalia se o Professor tiver liberado a avaliação do
+ *   bimestre para o grupo. Mesmo liberado, ele não sobrescreve uma nota que o
+ *   Líder já deu a esse integrante.
  * - O Professor sempre pode submeter, exigindo comentário de esclarecimento.
  *
  * Trava pós-professor:
@@ -194,15 +202,16 @@ export async function submeterAvaliacao({ grupoId, integranteId, bimestre, notas
       throw new AppError(403, 'O professor ja alterou esta avaliacao; somente ele pode edita-la agora');
     }
 
-    const { data: avaliacoesDoBimestre } = await supabaseAdmin
-      .from('avaliacoes')
-      .select('avaliador_id')
-      .eq('grupo_id', grupoId)
-      .eq('bimestre', bimestreValido);
+    const liberado = await viceEstaLiberado(grupoId, bimestreValido);
+    if (!liberado) {
+      throw new AppError(
+        403,
+        'Somente o lider avalia neste bimestre. O professor pode liberar a avaliacao para o vice-lider.'
+      );
+    }
 
-    const liderSubmeteu = (avaliacoesDoBimestre ?? []).some((a) => a.avaliador_id === grupo.lider_id);
-    if (liderSubmeteu && existente?.avaliador_id === grupo.lider_id) {
-      throw new AppError(403, 'O lider ja submeteu as notas; o vice-lider esta em modo somente leitura');
+    if (existente?.avaliador_id === grupo.lider_id) {
+      throw new AppError(403, 'O lider ja avaliou este integrante; o vice-lider nao pode sobrescrever a nota');
     }
   } else {
     throw new AppError(403, 'Perfil sem permissao para avaliar');

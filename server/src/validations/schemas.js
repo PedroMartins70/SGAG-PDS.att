@@ -63,16 +63,40 @@ export const cadastrarSchema = z
 
 /**
  * Schema de cadastro de perfil (exclusivo do Professor).
- * Apenas lider e vice_lider podem ser cadastrados — segundo professor e
- * aluno comum são bloqueados na camada de validação.
+ * Apenas lider, vice_lider e avaliador podem ser cadastrados — segundo professor
+ * e aluno comum são bloqueados na camada de validação.
+ * Para o avaliador, turma_ids (pelo menos uma turma) é obrigatório; para
+ * lider e vice_lider o campo é ignorado.
  */
-export const criarPerfilSchema = z.object({
-  nome: z.string().min(3, 'O nome deve ter no minimo 3 caracteres').max(255),
-  email: z.string().email('E-mail invalido'),
-  senha: z.string().min(6, 'A senha deve ter no minimo 6 caracteres'),
+export const criarPerfilSchema = z
+  .object({
+    nome: z.string().min(3, 'O nome deve ter no minimo 3 caracteres').max(255),
+    email: z.string().email('E-mail invalido'),
+    senha: z.string().min(6, 'A senha deve ter no minimo 6 caracteres'),
     role: z.enum(['lider', 'vice_lider', 'avaliador'], {
-    errorMap: () => ({ message: 'Somente os perfis lider, vice_lider e avaliador podem ser cadastrados pelo professor' }),
-  }),
+      errorMap: () => ({ message: 'Somente os perfis lider, vice_lider e avaliador podem ser cadastrados pelo professor' }),
+    }),
+    turma_ids: z.array(z.string().uuid('Turma invalida')).max(4).optional(),
+  })
+  .superRefine((dados, ctx) => {
+    if (dados.role === 'avaliador' && (!dados.turma_ids || dados.turma_ids.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['turma_ids'],
+        message: 'Escolha pelo menos uma turma para o avaliador',
+      });
+    }
+  });
+
+/**
+ * Schema para definir as turmas de um avaliador já cadastrado
+ * (pelo menos uma turma).
+ */
+export const definirTurmasSchema = z.object({
+  turma_ids: z
+    .array(z.string().uuid('Turma invalida'))
+    .min(1, 'Escolha pelo menos uma turma')
+    .max(4),
 });
 
 /**
@@ -120,6 +144,15 @@ export const adicionarIntegranteSchema = z.object({
  */
 export const designarPapelSchema = z.object({
   perfil_id: z.string().uuid('Perfil invalido'),
+});
+
+/**
+ * Schema para liberar (true) ou retirar a liberação (false) da avaliação do
+ * Vice-Líder em um bimestre (exclusivo do Professor).
+ */
+export const liberacaoViceSchema = z.object({
+  bimestre: bimestreSchema,
+  liberado: z.boolean({ invalid_type_error: 'Informe se a avaliacao do vice-lider esta liberada' }),
 });
 
 /**

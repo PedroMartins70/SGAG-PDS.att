@@ -1,16 +1,21 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import { registrarAuditoria } from '../utils/audit.js';
+import { validarTurmas, vincularTurmas } from './avaliador.service.js';
 
 /** Papéis cujo e-mail de acesso o professor pode alterar. */
 const PAPEIS_COM_EMAIL_EDITAVEL = ['lider', 'vice_lider', 'avaliador'];
 
 /**
  * Cria a conta de acesso (auth.users) e o perfil (profiles) de um
- * Líder ou Vice-Líder. Executado apenas pelo Professor.
+ * Líder, Vice-Líder ou Avaliador. Executado apenas pelo Professor.
  *
  * O usuário é criado com user_metadata { role, nome }; a trigger do banco
  * valida o papel e cria o perfil automaticamente em profiles.
+ *
+ * Para o Avaliador, é obrigatório informar as turmas que ele poderá ver
+ * (turma_ids). As turmas são validadas ANTES de criar a conta, e se o vínculo
+ * falhar depois, a conta recém-criada é removida para não ficar pela metade.
  *
  * Bloqueios de segurança aplicados:
  * - Segundo professor: rejeitado (role === 'professor').
@@ -20,18 +25,26 @@ const PAPEIS_COM_EMAIL_EDITAVEL = ['lider', 'vice_lider', 'avaliador'];
  * @param {string} dados.nome Nome completo.
  * @param {string} dados.email E-mail único.
  * @param {string} dados.senha Senha de acesso.
- * @param {'lider'|'vice_lider'} dados.role Papel do novo perfil.
+ * @param {'lider'|'vice_lider'|'avaliador'} dados.role Papel do novo perfil.
+ * @param {string[]} [dados.turma_ids] Turmas do avaliador (obrigatório só para avaliador).
  * @param {string} professorId UUID do professor executor.
- * @returns {Promise<{id: string, nome: string, email: string, role: string}>} Perfil criado.
- * @throws {AppError} Em caso de tentativa de segundo professor, aluno comum ou falha de criação.
+ * @returns {Promise<{id: string, nome: string, email: string, role: string, turma_ids?: string[]}>} Perfil criado.
+ * @throws {AppError} Em caso de tentativa de segundo professor, aluno comum, turmas inválidas ou falha de criação.
  */
-export async function criarPerfil({ nome, email, senha, role }, professorId) {
+export async function criarPerfil({ nome, email, senha, role, turma_ids: turmaIds }, professorId) {
   if (role === 'professor') {
     throw new AppError(400, 'Nao e permitido criar um segundo professor');
   }
 
   if (role === 'aluno') {
     throw new AppError(400, 'Alunos comuns nao possuem conta de acesso no sistema');
+  }
+
+  const ehAvaliador = role === 'avaliador';
+  let turmasValidas = [];
+
+  if (ehAvaliador) {
+    turmasValidas = await validarTurmas(turmaIds);
   }
 
   const { data, error } = await supabaseAdmin.auth.admin.createUser({
@@ -62,9 +75,35 @@ export async function criarPerfil({ nome, email, senha, role }, professorId) {
     throw new AppError(500, 'Falha ao criar o perfil. Tente novamente.');
   }
 
-  await registrarAuditoria('profiles', userId, 'INSERT', professorId, { nome, email, role });
+  const idsDasTurmas = turmasValidas.map((t) => t.id);
 
-  return { id: perfil.id, nome: perfil.nome, email: perfil.email, role: perfil.role };
+  if (ehAvaliador) {
+    try {
+      await vincularTurmas(userId, idsDasTurmas);
+    } catch (erroVinculo) {
+      // Desfaz a conta para não ficar um avaliador sem nenhuma turma
+      const { error: desfazerError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+      if (desfazerError) {
+        console.error('Falha ao desfazer a criacao do avaliador', userId, desfazerError.message);
+      }
+      throw erroVinculo;
+    }
+  }
+
+  await registrarAuditoria('profiles', userId, 'INSERT', professorId, {
+    nome,
+    email,
+    role,
+    ...(ehAvaliador ? { turma_ids: idsDasTurmas } : {}),
+  });
+
+  return {
+    id: perfil.id,
+    nome: perfil.nome,
+    email: perfil.email,
+    role: perfil.role,
+    ...(ehAvaliador ? { turma_ids: idsDasTurmas } : {}),
+  };
 }
 
 /**

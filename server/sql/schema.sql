@@ -1,155 +1,180 @@
--- ============================================================================
--- SGAG-PDS: DDL COMPLETO E CORRIGIDO (ALUNOS SEM CONTA)
--- Execute este script no SQL Editor do Supabase.
--- O back-end (service role) cria o usuário passando user_metadata { role, nome };
--- o trigger handle_new_user() cria o perfil automaticamente.
--- ============================================================================
+import { z } from 'zod';
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+/**
+ * Valida se um número de critério (0.00 a 0.20) é múltiplo de 0.05,
+ * conforme a matriz de avaliação especificada.
+ *
+ * @param {number} valor Valor do critério.
+ * @returns {boolean} true se o valor é múltiplo de 0.05 dentro da tolerância.
+ */
+const ehMultiploDeCincoCentimos = (valor) => {
+  const centavos = Math.round(valor * 100);
+  return Math.abs(centavos - valor * 100) < 1e-6 && centavos % 5 === 0;
+};
 
--- ----------------------------------------------------------------------------
--- 0. LIMPEZA DE TRIGGERS E TABELAS ANTIGAS
--- ----------------------------------------------------------------------------
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
+/**
+ * Critério de avaliação: valor numérico entre 0.00 e 0.20 com passo 0.05.
+ */
+const criterioSchema = z
+  .number()
+  .min(0, 'O criterio nao pode ser negativo')
+  .max(0.2, 'O criterio nao pode ultrapassar 0.20')
+  .refine(ehMultiploDeCincoCentimos, 'O criterio deve ser multiplo de 0.05');
 
-DROP TABLE IF EXISTS public.audit_logs CASCADE;
-DROP TABLE IF EXISTS public.avaliacoes CASCADE;
-DROP TABLE IF EXISTS public.integrantes CASCADE;
-DROP TABLE IF EXISTS public.grupos CASCADE;
-DROP TABLE IF EXISTS public.turmas CASCADE;
-DROP TABLE IF EXISTS public.profiles CASCADE;
+/**
+ * Bimestre (1 a 4), aceito como número ou string vinda de query/body.
+ */
+const bimestreSchema = z.coerce
+  .number()
+  .int('O bimestre deve ser um numero inteiro')
+  .min(1, 'O bimestre deve ser entre 1 e 4')
+  .max(4, 'O bimestre deve ser entre 1 e 4');
 
--- ----------------------------------------------------------------------------
--- 1. PROFILES (Apenas 1 Professor, Líderes e Vice-Líderes)
--- ----------------------------------------------------------------------------
-CREATE TABLE public.profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    nome VARCHAR(255) NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    role VARCHAR(20) NOT NULL CHECK (role IN ('professor', 'lider', 'vice_lider')),
-    is_active BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+/**
+ * Schema de autenticação (login).
+ */
+export const loginSchema = z.object({
+  email: z.string().email('E-mail invalido'),
+  senha: z.string().min(6, 'A senha deve ter no minimo 6 caracteres'),
+});
 
--- Trava: APENAS 1 PROFESSOR em todo o sistema
-CREATE UNIQUE INDEX unique_single_professor ON public.profiles ((role)) WHERE role = 'professor';
+/**
+ * Schema de cadastro (Professor, Líder ou Vice-Líder).
+ * Inclui confirmação de senha, senha forte e papel do perfil.
+ */
+export const cadastrarSchema = z
+  .object({
+    nome: z.string().min(3, 'O nome deve ter no minimo 3 caracteres').max(255),
+    email: z.string().email('E-mail institucional invalido'),
+    senha: z
+      .string()
+      .min(8, 'A senha deve ter no minimo 8 caracteres')
+      .regex(/[a-zA-Z]/, 'A senha deve conter letras')
+      .regex(/[0-9]/, 'A senha deve conter numeros'),
+    confirmar_senha: z.string(),
+    role: z.enum(['professor', 'lider', 'vice_lider'], {
+      errorMap: () => ({ message: 'Tipo de perfil invalido' }),
+    }),
+  })
+  .refine((dados) => dados.senha === dados.confirmar_senha, {
+    message: 'As senhas nao coincidem',
+    path: ['confirmar_senha'],
+  });
 
--- ----------------------------------------------------------------------------
--- 2. TURMAS (3A, 3B, 3C, 3D)
--- ----------------------------------------------------------------------------
-CREATE TABLE public.turmas (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    nome VARCHAR(10) UNIQUE NOT NULL CHECK (nome IN ('3A', '3B', '3C', '3D'))
-);
+/**
+ * Schema de cadastro de perfil (exclusivo do Professor).
+ * Apenas lider, vice_lider e avaliador podem ser cadastrados — segundo professor
+ * e aluno comum são bloqueados na camada de validação.
+ * Para o avaliador, turma_ids (pelo menos uma turma) é obrigatório; para
+ * lider e vice_lider o campo é ignorado.
+ */
+export const criarPerfilSchema = z
+  .object({
+    nome: z.string().min(3, 'O nome deve ter no minimo 3 caracteres').max(255),
+    email: z.string().email('E-mail invalido'),
+    senha: z.string().min(6, 'A senha deve ter no minimo 6 caracteres'),
+    role: z.enum(['lider', 'vice_lider', 'avaliador'], {
+      errorMap: () => ({ message: 'Somente os perfis lider, vice_lider e avaliador podem ser cadastrados pelo professor' }),
+    }),
+    turma_ids: z.array(z.string().uuid('Turma invalida')).max(4).optional(),
+  })
+  .superRefine((dados, ctx) => {
+    if (dados.role === 'avaliador' && (!dados.turma_ids || dados.turma_ids.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['turma_ids'],
+        message: 'Escolha pelo menos uma turma para o avaliador',
+      });
+    }
+  });
 
-INSERT INTO public.turmas (nome) VALUES ('3A'), ('3B'), ('3C'), ('3D');
+/**
+ * Schema para definir as turmas de um avaliador já cadastrado
+ * (pelo menos uma turma).
+ */
+export const definirTurmasSchema = z.object({
+  turma_ids: z
+    .array(z.string().uuid('Turma invalida'))
+    .min(1, 'Escolha pelo menos uma turma')
+    .max(4),
+});
 
--- ----------------------------------------------------------------------------
--- 3. GRUPOS
--- ----------------------------------------------------------------------------
-CREATE TABLE public.grupos (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    turma_id UUID NOT NULL REFERENCES public.turmas(id) ON DELETE CASCADE,
-    nome VARCHAR(100) NOT NULL,
-    lider_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-    vice_lider_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CONSTRAINT unique_nome_grupo_por_turma UNIQUE (turma_id, nome),
-    CONSTRAINT diferenca_lider_vice CHECK (lider_id IS NULL OR vice_lider_id IS NULL OR lider_id <> vice_lider_id)
-);
+/**
+ * Schema de listagem de perfis (filtro opcional por papel).
+ */
+export const listarPerfisSchema = z.object({
+  role: z.enum(['lider', 'vice_lider']).optional(),
+});
 
--- ----------------------------------------------------------------------------
--- 4. INTEGRANTES (Alunos comuns sem cadastro no sistema)
--- ----------------------------------------------------------------------------
-CREATE TABLE public.integrantes (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    grupo_id UUID NOT NULL REFERENCES public.grupos(id) ON DELETE CASCADE,
-    nome_aluno VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+/**
+ * Schema de criação de grupo (nome entre 1 e 100 caracteres).
+ */
+export const criarGrupoSchema = z.object({
+  nome: z.string().min(1, 'O nome do grupo e obrigatorio').max(100),
+});
 
--- ----------------------------------------------------------------------------
--- 5. AVALIAÇÕES (Líder/Vice/Professor avaliam o integrante)
--- ----------------------------------------------------------------------------
-CREATE TABLE public.avaliacoes (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    grupo_id UUID NOT NULL REFERENCES public.grupos(id) ON DELETE CASCADE,
-    integrante_id UUID NOT NULL REFERENCES public.integrantes(id) ON DELETE CASCADE,
-    avaliador_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+/**
+ * Schema de criação completa de um grupo (Novo Grupo):
+ * nome, Líder, Vice-Líder e integrantes (até 7).
+ */
+export const criarGrupoCompletoSchema = z.object({
+  turma_id: z.string().uuid('Turma invalida'),
+  nome: z.string().min(1, 'O nome do grupo e obrigatorio').max(100),
+  lider_id: z.string().uuid('Perfil de lider invalido'),
+  vice_lider_id: z.string().uuid('Perfil de vice-lider invalido'),
+  integrantes: z.array(z.string().min(1).max(255)).max(7).optional().default([]),
+});
 
-    interesse NUMERIC(3,2) NOT NULL DEFAULT 0.00 CHECK (interesse >= 0.00 AND interesse <= 0.20),
-    entrega_prazo NUMERIC(3,2) NOT NULL DEFAULT 0.00 CHECK (entrega_prazo >= 0.00 AND entrega_prazo <= 0.20),
-    participacao NUMERIC(3,2) NOT NULL DEFAULT 0.00 CHECK (participacao >= 0.00 AND participacao <= 0.20),
-    qualidade_trabalho NUMERIC(3,2) NOT NULL DEFAULT 0.00 CHECK (qualidade_trabalho >= 0.00 AND qualidade_trabalho <= 0.20),
-    respeito_grupo NUMERIC(3,2) NOT NULL DEFAULT 0.00 CHECK (respeito_grupo >= 0.00 AND respeito_grupo <= 0.20),
+/**
+ * Schema de renomeação de grupo.
+ */
+export const renomearGrupoSchema = z.object({
+  nome: z.string().min(1, 'O nome do grupo e obrigatorio').max(100),
+});
 
-    nota_total NUMERIC(3,2) GENERATED ALWAYS AS (
-        interesse + entrega_prazo + participacao + qualidade_trabalho + respeito_grupo
-    ) STORED,
+/**
+ * Schema de adição de integrante (aluno comum sem conta de acesso).
+ */
+export const adicionarIntegranteSchema = z.object({
+  nome_aluno: z.string().min(1, 'O nome do aluno e obrigatorio').max(255),
+});
 
-    alterado_por_professor BOOLEAN NOT NULL DEFAULT false,
-    comentario_esclarecimento TEXT,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+/**
+ * Schema de designação de Líder/Vice-Líder.
+ */
+export const designarPapelSchema = z.object({
+  perfil_id: z.string().uuid('Perfil invalido'),
+});
 
-    CONSTRAINT unique_avaliacao_por_integrante UNIQUE (grupo_id, integrante_id)
-);
+/**
+ * Schema de query da listagem de avaliações (bimestre opcional, padrão 1).
+ */
+export const listarAvaliacoesQuerySchema = z.object({
+  bimestre: bimestreSchema.optional().default(1),
+});
 
--- ----------------------------------------------------------------------------
--- 6. AUDIT_LOGS [BANCA-01]  (tabela obrigatória que estava faltando)
--- ----------------------------------------------------------------------------
-CREATE TABLE public.audit_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tabela_afetada TEXT NOT NULL,
-    registro_id UUID NOT NULL,
-    acao TEXT NOT NULL,
-    usuario_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-    detalhes JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+/**
+ * Schema de submissão de avaliação individual de um integrante.
+ * Bimestre (1 a 4) + 5 critérios (0.00 a 0.20, passo 0.05) + comentário opcional
+ * (qualquer perfil pode usar o comentário para justificar a nota; o professor
+ * é obrigado a preenchê-lo, o que é validado na camada de serviço).
+ */
+export const avaliacaoSchema = z.object({
+  bimestre: bimestreSchema,
+  interesse: criterioSchema,
+  entrega_prazo: criterioSchema,
+  participacao: criterioSchema,
+  qualidade_trabalho: criterioSchema,
+  respeito_grupo: criterioSchema,
+  comentario_esclarecimento: z.string().max(2000).optional().nullable(),
+});
 
--- ----------------------------------------------------------------------------
--- 7. BLOQUEIO RIGOROSO DE CADASTRO + CRIAÇÃO AUTOMÁTICA DO PERFIL
---    O back-end DEVE passar user_metadata = { role, nome } ao criar o usuário.
--- ----------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
-DECLARE
-    v_role VARCHAR(20);
-    v_nome TEXT;
-BEGIN
-    v_role := NEW.raw_user_meta_data->>'role';
-    v_nome := COALESCE(NEW.raw_user_meta_data->>'nome', 'Usuario');
-
-    -- Se tentar cadastrar sem ser professor, lider ou vice_lider, o banco cancela o cadastro
-    IF v_role IS NULL OR v_role NOT IN ('professor', 'lider', 'vice_lider') THEN
-        RAISE EXCEPTION 'Acesso negado: Apenas Professor, Lider e Vice-Lider podem criar conta.';
-    END IF;
-
-    INSERT INTO public.profiles (id, nome, email, role)
-    VALUES (NEW.id, v_nome, NEW.email, v_role);
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE TRIGGER on_auth_user_created
-AFTER INSERT ON auth.users
-FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- ----------------------------------------------------------------------------
--- 8. ROW LEVEL SECURITY (escritas via service role/back-end; leitura autenticada)
--- ----------------------------------------------------------------------------
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.turmas ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.grupos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.integrantes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.avaliacoes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "select_profiles" ON public.profiles FOR SELECT TO authenticated USING (true);
-CREATE POLICY "select_turmas" ON public.turmas FOR SELECT TO authenticated USING (true);
-CREATE POLICY "select_grupos" ON public.grupos FOR SELECT TO authenticated USING (true);
-CREATE POLICY "select_integrantes" ON public.integrantes FOR SELECT TO authenticated USING (true);
-CREATE POLICY "select_avaliacoes" ON public.avaliacoes FOR SELECT TO authenticated USING (true);
-CREATE POLICY "select_audit_logs" ON public.audit_logs FOR SELECT TO authenticated USING (true);
+/**
+ * Schema de exclusão de avaliação (Professor). Exige justificativa e o bimestre.
+ */
+export const excluirAvaliacaoSchema = z.object({
+  bimestre: bimestreSchema,
+  comentario_esclarecimento: z
+    .string()
+    .min(1, 'O comentario de esclarecimento e obrigatorio para excluir a nota'),
+});

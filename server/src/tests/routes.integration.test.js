@@ -35,7 +35,19 @@ const PERFIL_VICE = {
   is_active: true,
 };
 
+const PERFIL_AVALIADOR = {
+  id: 'aval-1',
+  nome: 'Prof Banca',
+  email: 'banca@escola.com',
+  role: 'avaliador',
+  is_active: true,
+};
+
 const TURMA = { id: 'turma-3a', nome: '3A' };
+
+const TURMA_3A_UUID = '33333333-3333-4333-8333-333333333333';
+const TURMA_3B_UUID = '44444444-4444-4444-8444-444444444444';
+const AVALIADOR_UUID = '55555555-5555-4555-8555-555555555555';
 
 const GRUPO = {
   id: 'g1',
@@ -122,6 +134,50 @@ describe('Integracao completa da API /api (TDD)', () => {
     expect(res.body.perfil.role).toBe('lider');
   });
 
+  it('POST /api/profiles cria avaliador ja vinculado as turmas escolhidas (professor)', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_PROFESSOR);
+    supabase.queue('turmas', {
+      data: [
+        { id: TURMA_3A_UUID, nome: '3A' },
+        { id: TURMA_3B_UUID, nome: '3B' },
+      ],
+      error: null,
+    });
+    supabase.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'aval-1' } }, error: null });
+    supabase.queue('profiles', { data: PERFIL_AVALIADOR, error: null });
+    supabase.queue('avaliador_turmas', { data: null, error: null });
+    supabase.queue('audit_logs', { data: null, error: null });
+
+    const res = await request(app)
+      .post('/api/profiles')
+      .set('Authorization', token)
+      .send({
+        nome: 'Prof Banca',
+        email: 'banca@escola.com',
+        senha: 'senha123',
+        role: 'avaliador',
+        turma_ids: [TURMA_3A_UUID, TURMA_3B_UUID],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.perfil.role).toBe('avaliador');
+    expect(res.body.perfil.turma_ids).toEqual([TURMA_3A_UUID, TURMA_3B_UUID]);
+  });
+
+  it('POST /api/profiles recusa avaliador sem turma (HTTP 400)', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_PROFESSOR);
+
+    const res = await request(app)
+      .post('/api/profiles')
+      .set('Authorization', token)
+      .send({ nome: 'Prof Banca', email: 'banca@escola.com', senha: 'senha123', role: 'avaliador' });
+
+    expect(res.status).toBe(400);
+    expect(supabase.auth.admin.createUser).not.toHaveBeenCalled();
+  });
+
   it('GET /api/profiles lista lideres e vice-lideres (professor)', async () => {
     const supabase = holder.supabase;
     const token = autenticarComo(supabase, PERFIL_PROFESSOR);
@@ -131,6 +187,85 @@ describe('Integracao completa da API /api (TDD)', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.perfis).toHaveLength(2);
+  });
+
+  it('GET /api/profiles/avaliadores lista os avaliadores com as turmas (professor)', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_PROFESSOR);
+    supabase.queue('profiles', {
+      data: [{ id: 'aval-1', nome: 'Prof Banca', email: 'banca@escola.com' }],
+      error: null,
+    });
+    supabase.queue('avaliador_turmas', {
+      data: [{ avaliador_id: 'aval-1', turma_id: TURMA_3A_UUID }],
+      error: null,
+    });
+    supabase.queue('turmas', { data: [{ id: TURMA_3A_UUID, nome: '3A' }], error: null });
+
+    const res = await request(app).get('/api/profiles/avaliadores').set('Authorization', token);
+
+    expect(res.status).toBe(200);
+    expect(res.body.avaliadores).toHaveLength(1);
+    expect(res.body.avaliadores[0].turmas[0].nome).toBe('3A');
+  });
+
+  it('GET /api/profiles/avaliadores e bloqueado para nao-professor (HTTP 403)', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_AVALIADOR);
+
+    const res = await request(app).get('/api/profiles/avaliadores').set('Authorization', token);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('PUT /api/profiles/avaliadores/:id/turmas define as turmas de um avaliador ja cadastrado', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_PROFESSOR);
+    supabase.queue('profiles', { data: { id: AVALIADOR_UUID, nome: 'Prof Banca', role: 'avaliador' }, error: null });
+    supabase.queue('turmas', {
+      data: [
+        { id: TURMA_3A_UUID, nome: '3A' },
+        { id: TURMA_3B_UUID, nome: '3B' },
+      ],
+      error: null,
+    });
+    supabase.queue('avaliador_turmas', { data: [{ turma_id: TURMA_3A_UUID }], error: null }); // atuais
+    supabase.queue('avaliador_turmas', { data: null, error: null }); // insert da 3B
+    supabase.queue('audit_logs', { data: null, error: null });
+
+    const res = await request(app)
+      .put(`/api/profiles/avaliadores/${AVALIADOR_UUID}/turmas`)
+      .set('Authorization', token)
+      .send({ turma_ids: [TURMA_3A_UUID, TURMA_3B_UUID] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.avaliador.turma_ids).toEqual([TURMA_3A_UUID, TURMA_3B_UUID]);
+  });
+
+  it('PUT /api/profiles/avaliadores/:id/turmas recusa lista vazia (HTTP 400)', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_PROFESSOR);
+
+    const res = await request(app)
+      .put(`/api/profiles/avaliadores/${AVALIADOR_UUID}/turmas`)
+      .set('Authorization', token)
+      .send({ turma_ids: [] });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('GET /api/profiles/minhas-turmas devolve so as turmas do avaliador logado', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_AVALIADOR);
+    supabase.queue('avaliador_turmas', {
+      data: [{ turma: { id: TURMA_3A_UUID, nome: '3A' } }],
+      error: null,
+    });
+
+    const res = await request(app).get('/api/profiles/minhas-turmas').set('Authorization', token);
+
+    expect(res.status).toBe(200);
+    expect(res.body.turmas).toEqual([{ id: TURMA_3A_UUID, nome: '3A' }]);
   });
 
   it('GET /api/turmas lista as turmas', async () => {
@@ -161,6 +296,34 @@ describe('Integracao completa da API /api (TDD)', () => {
     expect(res.body.grupos[0].integrantes).toHaveLength(1);
   });
 
+  it('GET /api/turmas/:turmaId/grupos bloqueia avaliador de turma que nao e dele (HTTP 403)', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_AVALIADOR);
+    supabase.queue('avaliador_turmas', { data: null, error: null });
+
+    const res = await request(app).get('/api/turmas/turma-3a/grupos').set('Authorization', token);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('GET /api/turmas/:turmaId/grupos libera avaliador na turma vinculada a ele', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_AVALIADOR);
+    supabase.queue('avaliador_turmas', { data: { turma_id: 'turma-3a' }, error: null });
+    supabase.queue('turmas', { data: TURMA, error: null });
+    supabase.queue('grupos', {
+      data: [
+        { id: 'g1', nome: 'Grupo Alfa', lider_id: 'lider-1', vice_lider_id: 'vice-1', integrantes: [INTEGRANTE] },
+      ],
+      error: null,
+    });
+
+    const res = await request(app).get('/api/turmas/turma-3a/grupos').set('Authorization', token);
+
+    expect(res.status).toBe(200);
+    expect(res.body.grupos).toHaveLength(1);
+  });
+
   it('POST /api/turmas/:turmaId/grupos cria grupo (professor)', async () => {
     const supabase = holder.supabase;
     const token = autenticarComo(supabase, PERFIL_PROFESSOR);
@@ -178,11 +341,27 @@ describe('Integracao completa da API /api (TDD)', () => {
     expect(res.body.grupo.id).toBe('g1');
   });
 
-  it('POST /api/turmas/:turmaId/grupos bloqueia o 6o grupo (HTTP 400)', async () => {
+  it('POST /api/turmas/:turmaId/grupos permite o 7o grupo (limite e 7)', async () => {
     const supabase = holder.supabase;
     const token = autenticarComo(supabase, PERFIL_PROFESSOR);
     supabase.queue('turmas', { data: TURMA, error: null });
-    supabase.queue('grupos', { data: [], error: null, count: 5 });
+    supabase.queue('grupos', { data: [], error: null, count: 6 });
+    supabase.queue('grupos', { data: { ...GRUPO, nome: 'Grupo Sete' }, error: null });
+    supabase.queue('audit_logs', { data: null, error: null });
+
+    const res = await request(app)
+      .post('/api/turmas/turma-3a/grupos')
+      .set('Authorization', token)
+      .send({ nome: 'Grupo Sete' });
+
+    expect(res.status).toBe(201);
+  });
+
+  it('POST /api/turmas/:turmaId/grupos bloqueia o 8o grupo (HTTP 400)', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_PROFESSOR);
+    supabase.queue('turmas', { data: TURMA, error: null });
+    supabase.queue('grupos', { data: [], error: null, count: 7 });
 
     const res = await request(app)
       .post('/api/turmas/turma-3a/grupos')
@@ -421,12 +600,14 @@ describe('Integracao completa da API /api (TDD)', () => {
       data: [{ id: 'av1', integrante_id: 'i1', nota_total: 0.85, alterado_por_professor: false }],
       error: null,
     });
+    supabase.queue('liberacoes_vice', { data: null, error: null });
 
     const res = await request(app).get('/api/grupos/g1').set('Authorization', token);
 
     expect(res.status).toBe(200);
     expect(res.body.grupo.lider.nome).toBe('Ana Lider');
     expect(res.body.grupo.media_geral).toBe(0.85);
+    expect(res.body.grupo.vice_liberado).toBe(false);
   });
 
   it('GET /api/grupos/:grupoId e bloqueado para nao-professor com HTTP 403', async () => {
@@ -453,6 +634,85 @@ describe('Integracao completa da API /api (TDD)', () => {
     expect(res.status).toBe(200);
     expect(res.body.grupo.turma_nome).toBe('3A');
     expect(res.body.grupo.integrantes).toHaveLength(1);
+  });
+
+  it('GET /api/grupos/:grupoId mostra vice_liberado=true quando o professor liberou o bimestre', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_PROFESSOR);
+    supabase.queue('grupos', {
+      data: {
+        id: 'g1',
+        turma_id: 'turma-3a',
+        nome: 'Grupo Alfa',
+        lider: { id: 'lider-1', nome: 'Ana Lider', email: 'lider@escola.com' },
+        vice: { id: 'vice-1', nome: 'Bia Vice', email: 'vice@escola.com' },
+      },
+      error: null,
+    });
+    supabase.queue('integrantes', { data: [INTEGRANTE], error: null });
+    supabase.queue('avaliacoes', { data: [], error: null });
+    supabase.queue('liberacoes_vice', { data: { grupo_id: 'g1' }, error: null });
+
+    const res = await request(app).get('/api/grupos/g1?bimestre=2').set('Authorization', token);
+
+    expect(res.status).toBe(200);
+    expect(res.body.grupo.vice_liberado).toBe(true);
+  });
+
+  it('PUT /api/grupos/:grupoId/liberacao-vice libera o vice no bimestre (professor)', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_PROFESSOR);
+    supabase.queue('grupos', { data: { id: 'g1', vice_lider_id: 'vice-1' }, error: null });
+    supabase.queue('liberacoes_vice', { data: null, error: null });
+    supabase.queue('audit_logs', { data: null, error: null });
+
+    const res = await request(app)
+      .put('/api/grupos/g1/liberacao-vice')
+      .set('Authorization', token)
+      .send({ bimestre: 2, liberado: true });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ grupo_id: 'g1', bimestre: 2, liberado: true });
+  });
+
+  it('PUT /api/grupos/:grupoId/liberacao-vice retira a liberacao (professor)', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_PROFESSOR);
+    supabase.queue('grupos', { data: { id: 'g1', vice_lider_id: 'vice-1' }, error: null });
+    supabase.queue('liberacoes_vice', { data: null, error: null });
+    supabase.queue('audit_logs', { data: null, error: null });
+
+    const res = await request(app)
+      .put('/api/grupos/g1/liberacao-vice')
+      .set('Authorization', token)
+      .send({ bimestre: 2, liberado: false });
+
+    expect(res.status).toBe(200);
+    expect(res.body.liberado).toBe(false);
+  });
+
+  it('PUT /api/grupos/:grupoId/liberacao-vice e bloqueado para o lider (HTTP 403)', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_LIDER);
+
+    const res = await request(app)
+      .put('/api/grupos/g1/liberacao-vice')
+      .set('Authorization', token)
+      .send({ bimestre: 2, liberado: true });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('PUT /api/grupos/:grupoId/liberacao-vice rejeita bimestre invalido (HTTP 400)', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_PROFESSOR);
+
+    const res = await request(app)
+      .put('/api/grupos/g1/liberacao-vice')
+      .set('Authorization', token)
+      .send({ bimestre: 9, liberado: true });
+
+    expect(res.status).toBe(400);
   });
 
   it('rotas inexistentes retornam HTTP 404', async () => {

@@ -143,6 +143,50 @@ describe('Página de Cadastro de Grupos', () => {
       expect(corpo.email).toBe('ana@gmail.com');
       expect(corpo.nome).toBe('Ana Lider');
       expect(corpo.role).toBe('vice_lider');
+      expect(corpo.turma_ids).toBeUndefined();
+    });
+  });
+
+  it('nao mostra as turmas no cadastro enquanto o papel nao for Avaliador', async () => {
+    mockFetch({ gruposT1: [] });
+
+    renderizar();
+
+    fireEvent.click(await screen.findByRole('button', { name: /cadastrar líder \/ vice/i }));
+    await screen.findByLabelText('Gmail');
+
+    expect(screen.queryByLabelText('Turma 3A')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Turma 3B')).not.toBeInTheDocument();
+  });
+
+  it('avaliador exige pelo menos uma turma e envia turma_ids no cadastro', async () => {
+    mockFetch({ gruposT1: [] });
+
+    renderizar();
+
+    fireEvent.click(await screen.findByRole('button', { name: /cadastrar líder \/ vice/i }));
+
+    fireEvent.change(await screen.findByLabelText('Gmail'), { target: { value: 'banca@gmail.com' } });
+    fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Prof Banca' } });
+    fireEvent.change(screen.getByLabelText('Senha'), { target: { value: 'Senha123' } });
+    fireEvent.click(screen.getByRole('button', { name: /^avaliador$/i }));
+
+    // As turmas aparecem só agora, e o botão fica travado até marcar uma
+    const turma3A = await screen.findByLabelText('Turma 3A');
+    expect(screen.getByLabelText('Turma 3B')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^cadastrar$/i })).toBeDisabled();
+
+    fireEvent.click(turma3A);
+    expect(screen.getByRole('button', { name: /^cadastrar$/i })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /^cadastrar$/i }));
+
+    await waitFor(() => {
+      const chamada = global.fetch.mock.calls.find(([url, opts]) => opts?.method === 'POST' && url.includes('/profiles'));
+      expect(chamada).toBeDefined();
+      const corpo = JSON.parse(chamada[1].body);
+      expect(corpo.role).toBe('avaliador');
+      expect(corpo.turma_ids).toEqual(['t1']);
     });
   });
 });

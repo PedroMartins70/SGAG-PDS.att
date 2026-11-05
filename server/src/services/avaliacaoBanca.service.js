@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import { registrarAuditoria } from '../utils/audit.js';
 import { obterPeriodo } from './periodoBanca.service.js';
+import { garantirAvaliadorNaTurma } from './avaliador.service.js';
 
 /** Bloco da ficha -> coluna da tabela avaliacoes_banca. */
 const COLUNAS = {
@@ -21,7 +22,7 @@ const COLUNAS = {
 async function buscarGrupo(grupoId) {
   const { data: grupo, error } = await supabaseAdmin
     .from('grupos')
-    .select('id, nome, lider_id, vice_lider_id')
+    .select('id, turma_id, nome, lider_id, vice_lider_id')
     .eq('id', grupoId)
     .maybeSingle();
 
@@ -73,7 +74,8 @@ function formatar(linha, nomesPorId = {}) {
  * Lista as avaliações da banca de um grupo em um bimestre.
  *
  * Quem vê o quê:
- * - Avaliador: apenas a própria avaliação (e pode editar).
+ * - Avaliador: apenas a própria avaliação (e pode editar), e somente em
+ *   grupos das turmas às quais foi vinculado.
  * - Professor: todas as avaliações (somente leitura).
  * - Líder e Vice-Líder: todas as avaliações do SEU grupo (somente leitura).
  *
@@ -94,6 +96,8 @@ export async function listarAvaliacoesBanca(grupoId, usuario, bimestre = 1) {
   if (!ehProfessor && !ehAvaliador && !ehDoGrupo) {
     throw new AppError(403, 'Sem permissao para ver as avaliacoes da banca deste grupo');
   }
+
+  await garantirAvaliadorNaTurma(usuario, grupo.turma_id);
 
   const periodo = await obterPeriodo(bimestreValido);
 
@@ -139,6 +143,7 @@ export async function listarAvaliacoesBanca(grupoId, usuario, bimestre = 1) {
  * Cria ou atualiza a avaliação da banca do avaliador logado para um grupo
  * em um bimestre. Cada avaliador tem exatamente uma avaliação por grupo/bimestre.
  * O total é calculado pelo próprio banco de dados.
+ * O avaliador só pode avaliar grupos das turmas às quais foi vinculado.
  *
  * @param {Object} params Parâmetros.
  * @param {string} params.grupoId UUID do grupo.
@@ -147,7 +152,7 @@ export async function listarAvaliacoesBanca(grupoId, usuario, bimestre = 1) {
  * @param {string} [params.comentario] Observações (até 2500 caracteres).
  * @param {Object} params.usuario Usuário autenticado.
  * @returns {Promise<Object>} Avaliação salva.
- * @throws {AppError} 403 se não for avaliador.
+ * @throws {AppError} 403 se não for avaliador ou se a turma não for dele.
  */
 export async function salvarAvaliacaoBanca({ grupoId, bimestre, notas, comentario, usuario }) {
   if (usuario.role !== 'avaliador') {
@@ -155,7 +160,9 @@ export async function salvarAvaliacaoBanca({ grupoId, bimestre, notas, comentari
   }
 
   const bimestreValido = validarBimestre(bimestre);
-  await buscarGrupo(grupoId);
+  const grupo = await buscarGrupo(grupoId);
+
+  await garantirAvaliadorNaTurma(usuario, grupo.turma_id);
 
   // Trava de segurança: só avalia dentro do período definido pelo professor
   const periodo = await obterPeriodo(bimestreValido);
@@ -217,7 +224,8 @@ export async function salvarAvaliacaoBanca({ grupoId, bimestre, notas, comentari
  * mais recente primeiro, com o nome de quem avaliou.
  *
  * Quem vê o quê:
- * - Avaliador: apenas as próprias alterações.
+ * - Avaliador: apenas as próprias alterações, e somente de grupos das
+ *   turmas às quais foi vinculado.
  * - Professor: todas.
  * - Líder e Vice-Líder: todas as do SEU grupo.
  *
@@ -236,6 +244,8 @@ export async function listarHistoricoBanca(grupoId, usuario) {
   if (!ehProfessor && !ehAvaliador && !ehDoGrupo) {
     throw new AppError(403, 'Sem permissao para consultar o historico da banca deste grupo');
   }
+
+  await garantirAvaliadorNaTurma(usuario, grupo.turma_id);
 
   let consulta = supabaseAdmin
     .from('audit_logs')

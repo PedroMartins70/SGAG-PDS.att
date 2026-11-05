@@ -13,7 +13,7 @@ export default function RoboBoasVindas() {
       <div className="robo-balao">
         <strong>Bem-vindo ao SGAG-PDS!</strong>
         <span>
-          Somos um site desenvolvido para gestão e avaliação de grupos do CEMI!
+          Sou um site desenvolvido para gestão e avaliação de grupos do CEMI!
         </span>
       </div>
     </div>
