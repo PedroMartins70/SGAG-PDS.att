@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Check, Copy, KeyRound, Loader2, Search } from 'lucide-react';
+import { Check, Copy, KeyRound, Loader2, Mail, Search } from 'lucide-react';
 import Button from './ui/Button.jsx';
+import Input from './ui/Input.jsx';
 import Modal from './ui/Modal.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
@@ -9,9 +10,11 @@ const ROTULOS = { lider: 'Líder', vice_lider: 'Vice-Líder', avaliador: 'Avalia
 
 /**
  * Botão "Contas e senhas" (só para o professor): lista as contas de líder, vice-líder e
- * avaliador e permite gerar uma SENHA TEMPORÁRIA para quem esqueceu a senha.
+ * avaliador e permite:
+ * - gerar uma SENHA TEMPORÁRIA para quem esqueceu a senha;
+ * - TROCAR O E-MAIL de acesso da conta.
  *
- * A senha aparece uma única vez, para o professor copiar e passar para a pessoa.
+ * A senha temporária aparece uma única vez, para o professor copiar e passar para a pessoa.
  * No primeiro acesso, a pessoa é obrigada a criar uma senha própria.
  *
  * @param {Object} props
@@ -26,11 +29,17 @@ export default function ContasSenhas({ className = '' }) {
   const [usuarios, setUsuarios] = useState([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState('');
+  const [sucesso, setSucesso] = useState('');
   const [busca, setBusca] = useState('');
   const [alvo, setAlvo] = useState(null);
   const [resultado, setResultado] = useState(null); // { perfil, senha_temporaria }
   const [gerando, setGerando] = useState(false);
   const [copiado, setCopiado] = useState('');
+
+  // Troca de e-mail
+  const [alvoEmail, setAlvoEmail] = useState(null);
+  const [novoEmail, setNovoEmail] = useState('');
+  const [salvandoEmail, setSalvandoEmail] = useState(false);
 
   async function carregar() {
     setCarregando(true);
@@ -48,17 +57,22 @@ export default function ContasSenhas({ className = '' }) {
   function abrir() {
     setAberto(true);
     setAlvo(null);
+    setAlvoEmail(null);
     setResultado(null);
     setBusca('');
     setCopiado('');
+    setErro('');
+    setSucesso('');
     carregar();
   }
 
   function fechar() {
     setAberto(false);
     setAlvo(null);
+    setAlvoEmail(null);
     setResultado(null); // a senha some da memória ao fechar
     setCopiado('');
+    setSucesso('');
   }
 
   async function gerar() {
@@ -73,6 +87,33 @@ export default function ContasSenhas({ className = '' }) {
       setErro(e.message || 'Nao foi possivel redefinir a senha.');
     } finally {
       setGerando(false);
+    }
+  }
+
+  function abrirTrocaEmail(usuario) {
+    setErro('');
+    setSucesso('');
+    setNovoEmail(usuario.email);
+    setAlvoEmail(usuario);
+  }
+
+  async function salvarEmail(evento) {
+    evento.preventDefault();
+    setSalvandoEmail(true);
+    setErro('');
+    try {
+      const { perfil } = await api(`/profiles/${alvoEmail.id}/email`, {
+        method: 'PUT',
+        token,
+        body: { email: novoEmail.trim() },
+      });
+      setUsuarios((lista) => lista.map((u) => (u.id === perfil.id ? { ...u, email: perfil.email } : u)));
+      setSucesso(`E-mail de ${perfil.nome} alterado para ${perfil.email}.`);
+      setAlvoEmail(null);
+    } catch (e) {
+      setErro(e.message || 'Nao foi possivel alterar o e-mail.');
+    } finally {
+      setSalvandoEmail(false);
     }
   }
 
@@ -91,6 +132,8 @@ export default function ContasSenhas({ className = '' }) {
     if (!termo) return usuarios;
     return usuarios.filter((u) => `${u.nome} ${u.email}`.toLowerCase().includes(termo));
   }, [usuarios, busca]);
+
+  const emailIgual = alvoEmail ? novoEmail.trim().toLowerCase() === alvoEmail.email.toLowerCase() : false;
 
   const mensagem = resultado
     ? `Olá, ${resultado.perfil.nome}! Sua senha temporária do SGAG-PDS é: ${resultado.senha_temporaria}\n` +
@@ -162,11 +205,51 @@ export default function ContasSenhas({ className = '' }) {
               </Button>
             </div>
           </div>
+        ) : alvoEmail ? (
+          <form onSubmit={salvarEmail} className="space-y-4">
+            <p className="text-sm text-text-muted">
+              Trocar o e-mail de acesso de <strong className="text-text">{alvoEmail.nome}</strong> (
+              {ROTULOS[alvoEmail.role] ?? alvoEmail.role}). E-mail atual:{' '}
+              <strong className="text-text">{alvoEmail.email}</strong>
+            </p>
+
+            <Input
+              label="Novo e-mail"
+              type="email"
+              icon={Mail}
+              placeholder="novoemail@gmail.com"
+              value={novoEmail}
+              onChange={(e) => setNovoEmail(e.target.value)}
+              required
+              autoFocus
+            />
+
+            <div className="rounded-lg border border-warning-soft bg-warning-soft px-3 py-2 text-sm font-medium text-warning">
+              O novo e-mail passa a ser o login da pessoa e o antigo deixa de funcionar. A senha continua a
+              mesma. O sistema não envia aviso: avise a pessoa em conversa privada.
+            </div>
+
+            {erro && <p className="text-sm font-medium text-danger">{erro}</p>}
+
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setAlvoEmail(null)}>
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1"
+                disabled={salvandoEmail || !novoEmail.trim() || emailIgual}
+              >
+                {salvandoEmail ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                {salvandoEmail ? 'Salvando...' : 'Salvar e-mail'}
+              </Button>
+            </div>
+          </form>
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-text-muted">
               Para quem esqueceu a senha: gere uma senha temporária e passe para a pessoa. No primeiro
-              acesso, ela cria uma senha própria.
+              acesso, ela cria uma senha própria. Aqui também dá para trocar o e-mail de acesso.
             </p>
 
             <div className="relative">
@@ -180,6 +263,7 @@ export default function ContasSenhas({ className = '' }) {
               />
             </div>
 
+            {sucesso && <p className="text-sm font-medium text-success">{sucesso}</p>}
             {erro && <p className="text-sm font-medium text-danger">{erro}</p>}
 
             <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
@@ -206,9 +290,22 @@ export default function ContasSenhas({ className = '' }) {
                         </p>
                       )}
                     </div>
-                    <Button size="sm" variant="outline" onClick={() => { setErro(''); setAlvo(usuario); }}>
-                      <KeyRound className="h-4 w-4" /> Redefinir
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={() => abrirTrocaEmail(usuario)}>
+                        <Mail className="h-4 w-4" /> Trocar e-mail
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setErro('');
+                          setSucesso('');
+                          setAlvo(usuario);
+                        }}
+                      >
+                        <KeyRound className="h-4 w-4" /> Redefinir
+                      </Button>
+                    </div>
                   </div>
                 ))
               )}

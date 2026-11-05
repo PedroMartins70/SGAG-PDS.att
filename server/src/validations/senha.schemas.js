@@ -22,3 +22,13 @@ export const trocarSenhaSchema = z
 
 /** Parâmetro :id da URL (UUID do perfil). */
 export const perfilIdParamSchema = z.object({ id: z.string().uuid('Identificador inválido') });
+
+/** PUT /profiles/:id/email — novo e-mail de acesso (sem espaços, em minúsculas). */
+export const trocarEmailSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email('E-mail inválido')
+    .max(255, 'O e-mail pode ter no máximo 255 caracteres'),
+});

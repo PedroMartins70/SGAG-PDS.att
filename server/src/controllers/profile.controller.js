@@ -1,5 +1,6 @@
 import { asyncHandler } from '../middlewares/error.middleware.js';
 import { criarPerfilSchema, listarPerfisSchema } from '../validations/schemas.js';
+import { perfilIdParamSchema, trocarEmailSchema } from '../validations/senha.schemas.js';
 import * as profileService from '../services/profile.service.js';
 
 /**
@@ -19,4 +20,15 @@ export const listarPerfis = asyncHandler(async (req, res) => {
   const { role } = listarPerfisSchema.parse(req.query);
   const perfis = await profileService.listarPerfis(role);
   res.json({ perfis });
+});
+
+/**
+ * PUT /api/profiles/:id/email — Troca o e-mail de acesso de uma conta de
+ * Líder, Vice-Líder ou Avaliador (exclusivo do Professor).
+ */
+export const trocarEmail = asyncHandler(async (req, res) => {
+  const { id } = perfilIdParamSchema.parse(req.params);
+  const { email } = trocarEmailSchema.parse(req.body);
+  const perfil = await profileService.trocarEmail({ perfilId: id, novoEmail: email }, req.user.id);
+  res.json({ perfil });
 });

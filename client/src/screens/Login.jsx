@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Lock, Mail, Shield, BarChart3, User } from 'lucide-react';
+import { Clock, Eye, EyeOff, Lock, Mail, Shield, BarChart3, User } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
 import Input from '../components/ui/Input.jsx';
@@ -70,10 +70,13 @@ function IlustracaoLogin() {
  * Quem entra com uma senha temporária (redefinida pelo professor) vê, no lugar do
  * login, a tela que obriga a criar uma senha própria.
  *
+ * Quando a sessão expira, o sistema volta para esta tela e mostra o aviso
+ * "Sua sessão expirou".
+ *
  * @returns {JSX.Element} Tela de login.
  */
 export default function Login() {
-  const { session, login } = useAuth();
+  const { session, login, avisoLogin, limparAvisoLogin } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
@@ -91,6 +94,7 @@ export default function Login() {
   async function handleSubmit(evento) {
     evento.preventDefault();
     setErro('');
+    limparAvisoLogin();
     setCarregando(true);
     try {
       await login(email, senha);
@@ -149,6 +153,13 @@ export default function Login() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {avisoLogin && (
+              <div className="flex items-start gap-2 rounded-lg border border-warning-soft bg-warning-soft px-3 py-2 text-sm font-medium text-warning">
+                <Clock className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{avisoLogin}</span>
+              </div>
+            )}
+
             <Input
               label="E-mail"
               type="email"
