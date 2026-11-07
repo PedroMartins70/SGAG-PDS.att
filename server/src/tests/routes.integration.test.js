@@ -450,7 +450,11 @@ describe('Integracao completa da API /api (TDD)', () => {
     const token = autenticarComo(supabase, PERFIL_PROFESSOR);
     const liderUuid = '11111111-1111-4111-8111-111111111111';
     supabase.queue('grupos', { data: { ...GRUPO, lider_id: null, vice_lider_id: null }, error: null });
-    supabase.queue('profiles', { data: { id: liderUuid, role: 'lider', is_active: true }, error: null });
+    supabase.queue('profiles', { data: { id: liderUuid, nome: 'Ana Lider', role: 'lider', is_active: true }, error: null });
+    supabase.queue('grupos', { data: [], error: null }); // o perfil nao lidera outro grupo
+    supabase.queue('integrantes', { data: [], error: null }); // ainda nao esta na lista
+    supabase.queue('integrantes', { data: { id: 'i9', nome_aluno: 'Ana Lider' }, error: null });
+    supabase.queue('audit_logs', { data: null, error: null });
     supabase.queue('grupos', { data: null, error: null });
     supabase.queue('audit_logs', { data: null, error: null });
 
@@ -468,7 +472,11 @@ describe('Integracao completa da API /api (TDD)', () => {
     const token = autenticarComo(supabase, PERFIL_PROFESSOR);
     const viceUuid = '22222222-2222-4222-8222-222222222222';
     supabase.queue('grupos', { data: { ...GRUPO, lider_id: null, vice_lider_id: null }, error: null });
-    supabase.queue('profiles', { data: { id: viceUuid, role: 'vice_lider', is_active: true }, error: null });
+    supabase.queue('profiles', { data: { id: viceUuid, nome: 'Bia Vice', role: 'vice_lider', is_active: true }, error: null });
+    supabase.queue('grupos', { data: [], error: null }); // o perfil nao e vice de outro grupo
+    supabase.queue('integrantes', { data: [], error: null }); // ainda nao esta na lista
+    supabase.queue('integrantes', { data: { id: 'i9', nome_aluno: 'Bia Vice' }, error: null });
+    supabase.queue('audit_logs', { data: null, error: null });
     supabase.queue('grupos', { data: null, error: null });
     supabase.queue('audit_logs', { data: null, error: null });
 
@@ -479,6 +487,42 @@ describe('Integracao completa da API /api (TDD)', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.vice_lider_id).toBe(viceUuid);
+  });
+
+  it('PUT /api/grupos/:grupoId/lider recusa perfil que ja lidera outro grupo (HTTP 400)', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_PROFESSOR);
+    const liderUuid = '11111111-1111-4111-8111-111111111111';
+    supabase.queue('grupos', { data: { ...GRUPO, lider_id: null, vice_lider_id: null }, error: null });
+    supabase.queue('profiles', { data: { id: liderUuid, nome: 'Ana Lider', role: 'lider', is_active: true }, error: null });
+    supabase.queue('grupos', { data: [{ id: 'g2', nome: 'Grupo Beta' }], error: null });
+
+    const res = await request(app)
+      .put('/api/grupos/g1/lider')
+      .set('Authorization', token)
+      .send({ perfil_id: liderUuid });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('PUT /api/grupos/:grupoId/vice-lider nao duplica o integrante quando o nome ja esta no grupo', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_PROFESSOR);
+    const viceUuid = '22222222-2222-4222-8222-222222222222';
+    supabase.queue('grupos', { data: { ...GRUPO, lider_id: null, vice_lider_id: null }, error: null });
+    supabase.queue('profiles', { data: { id: viceUuid, nome: 'Bia Vice', role: 'vice_lider', is_active: true }, error: null });
+    supabase.queue('grupos', { data: [], error: null });
+    supabase.queue('integrantes', { data: [{ id: 'i2', nome_aluno: 'bia vice' }], error: null });
+    supabase.queue('grupos', { data: null, error: null });
+    supabase.queue('audit_logs', { data: null, error: null });
+
+    const res = await request(app)
+      .put('/api/grupos/g1/vice-lider')
+      .set('Authorization', token)
+      .send({ perfil_id: viceUuid });
+
+    expect(res.status).toBe(200);
+    expect(res.body.integrante_adicionado).toBe(false);
   });
 
   it('GET /api/grupos/:grupoId/avaliacoes retorna permissao para o lider', async () => {

@@ -53,6 +53,10 @@ export default function DetalheGrupo() {
   const [form, setForm] = useState({ nome: '', integrante: '', justificativa: '', crit: critVazio() });
   const [liberando, setLiberando] = useState(false);
   const [erroLiberacao, setErroLiberacao] = useState('');
+  const [perfis, setPerfis] = useState([]);
+  const [perfilEscolhido, setPerfilEscolhido] = useState('');
+  const [erroPapel, setErroPapel] = useState('');
+  const [salvandoPapel, setSalvandoPapel] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -137,6 +141,40 @@ export default function DetalheGrupo() {
       setErroLiberacao(e.message || 'Nao foi possivel alterar a liberacao.');
     } finally {
       setLiberando(false);
+    }
+  }
+
+  /**
+   * Abre a janela para trocar o Líder ou o Vice-Líder do grupo e carrega os
+   * perfis disponíveis.
+   *
+   * @param {'trocarLider'|'trocarVice'} tipo Cargo que será trocado.
+   */
+  async function abrirTrocaPapel(tipo) {
+    setErroPapel('');
+    setPerfilEscolhido('');
+    setModal({ tipo });
+    try {
+      const { perfis: lista } = await api('/profiles', { token });
+      setPerfis(lista);
+    } catch (e) {
+      setErroPapel(e.message || 'Nao foi possivel carregar os perfis.');
+    }
+  }
+
+  /** Salva o novo Líder ou Vice-Líder; se o servidor recusar, mostra o motivo na janela. */
+  async function salvarPapel() {
+    setSalvandoPapel(true);
+    setErroPapel('');
+    try {
+      const rota = modal.tipo === 'trocarLider' ? 'lider' : 'vice-lider';
+      await api(`/grupos/${grupoId}/${rota}`, { method: 'PUT', token, body: { perfil_id: perfilEscolhido } });
+      setModal(null);
+      await carregar();
+    } catch (e) {
+      setErroPapel(e.message || 'Nao foi possivel salvar a alteracao.');
+    } finally {
+      setSalvandoPapel(false);
     }
   }
 
@@ -264,16 +302,26 @@ export default function DetalheGrupo() {
         {/* Resumo: Líder, Vice, média */}
         <div className="mb-6 grid gap-3 sm:grid-cols-3">
           <Card className="p-4">
-            <p className="mb-1 flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-badge-lider-text">
-              <Crown className="h-4 w-4" /> Líder
-            </p>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <p className="flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-badge-lider-text">
+                <Crown className="h-4 w-4" /> Líder
+              </p>
+              <Button size="sm" variant="ghost" onClick={() => abrirTrocaPapel('trocarLider')}>
+                <Pencil className="h-3.5 w-3.5" /> Alterar
+              </Button>
+            </div>
             <p className="truncate font-semibold text-text">{grupo.lider?.nome ?? '—'}</p>
             <p className="truncate text-xs text-text-muted">{grupo.lider?.email}</p>
           </Card>
           <Card className="p-4">
-            <p className="mb-1 flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-badge-vice-text">
-              <Shield className="h-4 w-4" /> Vice-Líder
-            </p>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <p className="flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-badge-vice-text">
+                <Shield className="h-4 w-4" /> Vice-Líder
+              </p>
+              <Button size="sm" variant="ghost" onClick={() => abrirTrocaPapel('trocarVice')}>
+                <Pencil className="h-3.5 w-3.5" /> Alterar
+              </Button>
+            </div>
             <p className="truncate font-semibold text-text">{grupo.vice?.nome ?? '—'}</p>
             <p className="truncate text-xs text-text-muted">{grupo.vice?.email}</p>
           </Card>
@@ -346,6 +394,40 @@ export default function DetalheGrupo() {
           <Button variant="outline" className="flex-1" onClick={() => setModal(null)}>Cancelar</Button>
           <Button variant="danger" className="flex-1" onClick={excluirIntegrante}>Excluir</Button>
         </div>
+      </Modal>
+
+      {/* Modal trocar Líder / Vice-Líder */}
+      <Modal
+        open={modal?.tipo === 'trocarLider' || modal?.tipo === 'trocarVice'}
+        onClose={() => setModal(null)}
+        title={modal?.tipo === 'trocarLider' ? 'Alterar Líder do grupo' : 'Alterar Vice-Líder do grupo'}
+      >
+        <EscolhaPerfil
+          perfis={perfis.filter((p) => p.role === (modal?.tipo === 'trocarLider' ? 'lider' : 'vice_lider'))}
+          vazio={
+            modal?.tipo === 'trocarLider'
+              ? 'Nenhum perfil de Líder cadastrado ainda.'
+              : 'Nenhum perfil de Vice-Líder cadastrado ainda.'
+          }
+          atualId={modal?.tipo === 'trocarLider' ? grupo.lider?.id : grupo.vice?.id}
+          selecionado={perfilEscolhido}
+          onSelecionar={setPerfilEscolhido}
+        />
+        <p className="mt-3 text-xs font-medium text-warning">
+          Atenção: quem estava no cargo será removido do grupo, junto com as notas que recebeu como integrante.
+        </p>
+        {erroPapel && <p className="mt-2 text-sm font-medium text-danger">{erroPapel}</p>}
+        <Button
+          className="mt-4 w-full"
+          onClick={salvarPapel}
+          disabled={
+            !perfilEscolhido ||
+            salvandoPapel ||
+            perfilEscolhido === (modal?.tipo === 'trocarLider' ? grupo.lider?.id : grupo.vice?.id)
+          }
+        >
+          {salvandoPapel ? 'Salvando...' : 'Salvar'}
+        </Button>
       </Modal>
 
       {/* Modal editar avaliação (justificativa obrigatória) */}
@@ -513,6 +595,75 @@ function AvaliacaoProfessor({ crit, justificativa, onChangeCrit, onChangeJustifi
       <Button variant="success" className="w-full" onClick={onSalvar} disabled={!pronto}>
         Salvar e Confirmar
       </Button>
+    </div>
+  );
+}
+
+/**
+ * Lista de perfis (Líder ou Vice-Líder) para escolher quem assume o cargo.
+ * Tem campo de busca por nome ou e-mail e altura limitada com rolagem própria,
+ * para a janela não passar do tamanho da tela quando há muitos perfis.
+ * O perfil que ocupa o cargo hoje aparece marcado como "Atual".
+ *
+ * @param {Object} props Propriedades da escolha.
+ * @param {Array<Object>} props.perfis Perfis disponíveis.
+ * @param {string} props.vazio Mensagem quando não há perfis.
+ * @param {string} [props.atualId] UUID de quem ocupa o cargo agora.
+ * @param {string} props.selecionado UUID selecionado.
+ * @param {Function} props.onSelecionar Callback de seleção.
+ * @returns {JSX.Element} Lista de escolha com busca e rolagem.
+ */
+function EscolhaPerfil({ perfis, vazio, atualId, selecionado, onSelecionar }) {
+  const [busca, setBusca] = useState('');
+
+  if (perfis.length === 0) {
+    return <p className="text-text-muted">{vazio}</p>;
+  }
+
+  const termo = busca.trim().toLowerCase();
+  const filtrados = termo
+    ? perfis.filter((perfil) => `${perfil.nome} ${perfil.email}`.toLowerCase().includes(termo))
+    : perfis;
+
+  return (
+    <div>
+      <input
+        type="search"
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+        placeholder="Buscar por nome ou e-mail"
+        className="h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm text-text placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
+      />
+
+      <div className="mt-3 max-h-[40vh] space-y-2 overflow-y-auto pr-1">
+        {filtrados.length === 0 ? (
+          <p className="py-4 text-center text-sm text-text-muted">Nenhum perfil encontrado.</p>
+        ) : (
+          filtrados.map((perfil) => (
+            <button
+              key={perfil.id}
+              type="button"
+              onClick={() => onSelecionar(perfil.id)}
+              className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
+                selecionado === perfil.id
+                  ? 'border-primary bg-primary-soft'
+                  : 'border-border bg-surface hover:bg-surface-muted'
+              }`}
+            >
+              <Avatar name={perfil.nome} className="h-8 w-8 shrink-0 text-xs" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-text">{perfil.nome}</p>
+                <p className="truncate text-xs text-text-muted">{perfil.email}</p>
+              </div>
+              {perfil.id === atualId && (
+                <span className="shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-xs font-bold text-primary">
+                  Atual
+                </span>
+              )}
+            </button>
+          ))
+        )}
+      </div>
     </div>
   );
 }

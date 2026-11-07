@@ -314,14 +314,162 @@ export async function removerIntegrante({ grupoId, integranteId, professorId }) 
 }
 
 /**
- * Designa o Líder de um grupo (exclusivo do Professor).
- * Valida que o perfil possui o papel 'lider' e está ativo.
+ * Garante que o perfil não é líder/vice de OUTRO grupo. Um perfil só pode
+ * liderar um grupo (a tela do líder/vice mostra um único grupo).
+ *
+ * @param {string} perfilId UUID do perfil que será designado.
+ * @param {string} grupoId UUID do grupo que está sendo alterado (é ignorado na busca).
+ * @throws {AppError} 400 se o perfil já for líder ou vice de outro grupo.
+ */
+async function garantirPerfilLivreEmOutroGrupo(perfilId, grupoId) {
+  const { data, error } = await supabaseAdmin
+    .from('grupos')
+    .select('id, nome')
+    .or(`lider_id.eq.${perfilId},vice_lider_id.eq.${perfilId}`)
+    .neq('id', grupoId);
+
+  if (error) {
+    throw new AppError(500, 'Falha ao verificar os grupos do perfil');
+  }
+
+  if ((data ?? []).length > 0) {
+    throw new AppError(400, `Este perfil ja e lider ou vice-lider do grupo "${data[0].nome}"`);
+  }
+}
+
+/** Normaliza um nome para comparação (sem espaços nas pontas e sem diferenciar maiúsculas). */
+const normalizarNome = (texto) => String(texto ?? '').trim().toLowerCase();
+
+/**
+ * Prepara a troca de líder/vice na lista de integrantes, SEM alterar nada ainda:
+ * descobre quem está saindo do cargo (para ser removido do grupo) e se a pessoa
+ * nova já está na lista. O integrante que sai libera uma vaga, então a troca
+ * funciona mesmo com o grupo cheio.
+ *
+ * @param {Object} params Parâmetros.
+ * @param {string} params.grupoId UUID do grupo.
+ * @param {string} params.novoNome Nome da pessoa que assume o cargo.
+ * @param {string|null} params.anteriorId UUID do perfil que ocupava o cargo (ou null).
+ * @returns {Promise<{jaEsta: boolean, saiu: {id: string, nome_aluno: string}|null, nomeNovo: string}>}
+ * @throws {AppError} 400 se o grupo ficar acima do limite de integrantes.
+ */
+async function prepararTrocaDeCargo({ grupoId, novoNome, anteriorId }) {
+  const { data: integrantes, error } = await supabaseAdmin
+    .from('integrantes')
+    .select('id, nome_aluno')
+    .eq('grupo_id', grupoId);
+
+  if (error) {
+    throw new AppError(500, 'Falha ao consultar os integrantes do grupo');
+  }
+
+  const lista = integrantes ?? [];
+
+  let nomeAnterior = null;
+  if (anteriorId) {
+    const { data: anterior } = await supabaseAdmin
+      .from('profiles')
+      .select('nome')
+      .eq('id', anteriorId)
+      .maybeSingle();
+    nomeAnterior = anterior?.nome ?? null;
+  }
+
+  const nomeNovo = String(novoNome ?? '').trim();
+  const chaveNovo = normalizarNome(nomeNovo);
+
+  // Não remove ninguém se o nome antigo e o novo forem o mesmo (evita apagar a pessoa nova)
+  const saiu =
+    nomeAnterior && normalizarNome(nomeAnterior) !== chaveNovo
+      ? (lista.find((i) => normalizarNome(i.nome_aluno) === normalizarNome(nomeAnterior)) ?? null)
+      : null;
+
+  const jaEsta = !chaveNovo || lista.some((i) => normalizarNome(i.nome_aluno) === chaveNovo);
+  const totalAposSaida = lista.length - (saiu ? 1 : 0);
+
+  if (!jaEsta && totalAposSaida >= LIMITE_INTEGRANTES_POR_GRUPO) {
+    throw new AppError(
+      400,
+      `O grupo ja tem ${LIMITE_INTEGRANTES_POR_GRUPO} integrantes e "${nomeNovo}" nao esta entre eles. Remova um integrante antes de fazer a troca.`
+    );
+  }
+
+  return { jaEsta, saiu, nomeNovo };
+}
+
+/**
+ * Adiciona a pessoa que assumiu o cargo à lista de integrantes do grupo.
+ *
+ * @param {Object} params Parâmetros.
+ * @param {string} params.grupoId UUID do grupo.
+ * @param {string} params.nome Nome da pessoa.
+ * @param {string} params.professorId UUID do professor executor.
+ * @returns {Promise<void>}
+ */
+async function adicionarIntegranteDoCargo({ grupoId, nome, professorId }) {
+  const { data: criado, error } = await supabaseAdmin
+    .from('integrantes')
+    .insert({ grupo_id: grupoId, nome_aluno: nome })
+    .select()
+    .single();
+
+  if (error) {
+    throw new AppError(400, `Falha ao adicionar integrante: ${error.message}`);
+  }
+
+  await registrarAuditoria('integrantes', criado.id, 'INSERT', professorId, {
+    grupo_id: grupoId,
+    nome_aluno: nome,
+    origem: 'designacao_de_cargo',
+  });
+}
+
+/**
+ * Remove do grupo quem deixou o cargo de líder/vice. As notas que essa pessoa
+ * recebeu como integrante são apagadas junto (ON DELETE CASCADE).
+ *
+ * @param {Object} params Parâmetros.
+ * @param {string} params.grupoId UUID do grupo.
+ * @param {{id: string, nome_aluno: string}} params.integrante Integrante que sai.
+ * @param {string} params.professorId UUID do professor executor.
+ * @returns {Promise<void>}
+ * @throws {AppError} 500 se a remoção falhar (o cargo já foi trocado nesse ponto).
+ */
+async function removerIntegranteDoCargoAnterior({ grupoId, integrante, professorId }) {
+  const { error } = await supabaseAdmin
+    .from('integrantes')
+    .delete()
+    .eq('id', integrante.id)
+    .eq('grupo_id', grupoId);
+
+  if (error) {
+    throw new AppError(
+      500,
+      `O cargo foi alterado, mas nao foi possivel remover "${integrante.nome_aluno}" do grupo. Remova-o manualmente.`
+    );
+  }
+
+  await registrarAuditoria('integrantes', integrante.id, 'DELETE', professorId, {
+    grupo_id: grupoId,
+    nome_aluno: integrante.nome_aluno,
+    origem: 'troca_de_cargo',
+  });
+}
+
+/**
+ * Designa (ou troca) o Líder de um grupo (exclusivo do Professor).
+ * Valida que o perfil possui o papel 'lider', está ativo, não é o vice deste
+ * grupo e não lidera outro grupo.
+ *
+ * Na troca, a pessoa nova entra na lista de integrantes (se ainda não estiver)
+ * e o líder anterior é REMOVIDO do grupo, junto com as notas que recebeu como
+ * integrante.
  *
  * @param {Object} params Parâmetros de designação.
  * @param {string} params.grupoId UUID do grupo.
  * @param {string} params.perfilId UUID do perfil designado.
  * @param {string} params.professorId UUID do professor executor.
- * @returns {Promise<{id: string, lider_id: string}>} Grupo atualizado.
+ * @returns {Promise<{id: string, lider_id: string, integrante_adicionado: boolean, integrante_removido: boolean}>} Grupo atualizado.
  */
 export async function designarLider({ grupoId, perfilId, professorId }) {
   const grupo = await buscarGrupo(grupoId);
@@ -339,6 +487,17 @@ export async function designarLider({ grupoId, perfilId, professorId }) {
     throw new AppError(400, 'O perfil ja e o vice-lider deste grupo');
   }
 
+  await garantirPerfilLivreEmOutroGrupo(perfilId, grupoId);
+  const troca = await prepararTrocaDeCargo({
+    grupoId,
+    novoNome: perfil.nome,
+    anteriorId: grupo.lider_id !== perfilId ? grupo.lider_id : null,
+  });
+
+  if (!troca.jaEsta) {
+    await adicionarIntegranteDoCargo({ grupoId, nome: troca.nomeNovo, professorId });
+  }
+
   const { error } = await supabaseAdmin.from('grupos').update({ lider_id: perfilId }).eq('id', grupoId);
 
   if (error) {
@@ -348,20 +507,35 @@ export async function designarLider({ grupoId, perfilId, professorId }) {
   await registrarAuditoria('grupos', grupoId, 'UPDATE', professorId, {
     tipo: 'designar_lider',
     perfil_id: perfilId,
+    lider_anterior_id: grupo.lider_id,
   });
 
-  return { id: grupoId, lider_id: perfilId };
+  if (troca.saiu) {
+    await removerIntegranteDoCargoAnterior({ grupoId, integrante: troca.saiu, professorId });
+  }
+
+  return {
+    id: grupoId,
+    lider_id: perfilId,
+    integrante_adicionado: !troca.jaEsta,
+    integrante_removido: Boolean(troca.saiu),
+  };
 }
 
 /**
- * Designa o Vice-Líder de um grupo (exclusivo do Professor).
- * Valida que o perfil possui o papel 'vice_lider' e está ativo.
+ * Designa (ou troca) o Vice-Líder de um grupo (exclusivo do Professor).
+ * Valida que o perfil possui o papel 'vice_lider', está ativo, não é o líder
+ * deste grupo e não é líder/vice de outro grupo.
+ *
+ * Na troca, a pessoa nova entra na lista de integrantes (se ainda não estiver)
+ * e o vice anterior é REMOVIDO do grupo, junto com as notas que recebeu como
+ * integrante.
  *
  * @param {Object} params Parâmetros de designação.
  * @param {string} params.grupoId UUID do grupo.
  * @param {string} params.perfilId UUID do perfil designado.
  * @param {string} params.professorId UUID do professor executor.
- * @returns {Promise<{id: string, vice_lider_id: string}>} Grupo atualizado.
+ * @returns {Promise<{id: string, vice_lider_id: string, integrante_adicionado: boolean, integrante_removido: boolean}>} Grupo atualizado.
  */
 export async function designarViceLider({ grupoId, perfilId, professorId }) {
   const grupo = await buscarGrupo(grupoId);
@@ -379,6 +553,17 @@ export async function designarViceLider({ grupoId, perfilId, professorId }) {
     throw new AppError(400, 'O perfil ja e o lider deste grupo');
   }
 
+  await garantirPerfilLivreEmOutroGrupo(perfilId, grupoId);
+  const troca = await prepararTrocaDeCargo({
+    grupoId,
+    novoNome: perfil.nome,
+    anteriorId: grupo.vice_lider_id !== perfilId ? grupo.vice_lider_id : null,
+  });
+
+  if (!troca.jaEsta) {
+    await adicionarIntegranteDoCargo({ grupoId, nome: troca.nomeNovo, professorId });
+  }
+
   const { error } = await supabaseAdmin
     .from('grupos')
     .update({ vice_lider_id: perfilId })
@@ -391,9 +576,19 @@ export async function designarViceLider({ grupoId, perfilId, professorId }) {
   await registrarAuditoria('grupos', grupoId, 'UPDATE', professorId, {
     tipo: 'designar_vice_lider',
     perfil_id: perfilId,
+    vice_lider_anterior_id: grupo.vice_lider_id,
   });
 
-  return { id: grupoId, vice_lider_id: perfilId };
+  if (troca.saiu) {
+    await removerIntegranteDoCargoAnterior({ grupoId, integrante: troca.saiu, professorId });
+  }
+
+  return {
+    id: grupoId,
+    vice_lider_id: perfilId,
+    integrante_adicionado: !troca.jaEsta,
+    integrante_removido: Boolean(troca.saiu),
+  };
 }
 
 /**

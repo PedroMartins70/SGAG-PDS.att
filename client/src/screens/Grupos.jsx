@@ -55,6 +55,7 @@ export default function Grupos() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [erroPerfil, setErroPerfil] = useState('');
+  const [erroModal, setErroModal] = useState('');
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({ nome: '', integrante: '', perfilId: '' });
   const [formPerfil, setFormPerfil] = useState(PERFIL_VAZIO);
@@ -110,6 +111,7 @@ export default function Grupos() {
   /** Abre um modal de ação e reinicia o formulário. */
   function abrirModal(tipo, contexto = {}) {
     setForm({ nome: contexto.nome ?? '', integrante: '', perfilId: '' });
+    setErroModal('');
     setModal({ tipo, ...contexto });
   }
 
@@ -191,23 +193,26 @@ export default function Grupos() {
     await recarregar(turmaId);
   }
 
-  async function designarLider() {
-    await api(`/grupos/${modal.grupoId}/lider`, { method: 'PUT', body: { perfil_id: form.perfilId }, token });
-    const turmaId = modal.turmaId;
-    setModal(null);
-    await recarregar(turmaId);
+  /**
+   * Define (ou troca) o Líder ou o Vice-Líder de um grupo já criado.
+   * Se o servidor recusar, o motivo aparece dentro da janela.
+   *
+   * @param {'lider'|'vice-lider'} rota Cargo que será definido.
+   */
+  async function designarPapel(rota) {
+    setErroModal('');
+    try {
+      await api(`/grupos/${modal.grupoId}/${rota}`, { method: 'PUT', body: { perfil_id: form.perfilId }, token });
+      const turmaId = modal.turmaId;
+      setModal(null);
+      await recarregar(turmaId);
+    } catch (e) {
+      setErroModal(e.message || 'Nao foi possivel alterar o cargo.');
+    }
   }
 
-  async function designarVice() {
-    await api(`/grupos/${modal.grupoId}/vice-lider`, {
-      method: 'PUT',
-      body: { perfil_id: form.perfilId },
-      token,
-    });
-    const turmaId = modal.turmaId;
-    setModal(null);
-    await recarregar(turmaId);
-  }
+  const designarLider = () => designarPapel('lider');
+  const designarVice = () => designarPapel('vice-lider');
 
   if (carregando) {
     return (
@@ -367,26 +372,36 @@ export default function Grupos() {
         </form>
       </Modal>
 
-      <Modal open={modal?.tipo === 'lider'} onClose={() => setModal(null)} title="Designar Líder">
+      <Modal open={modal?.tipo === 'lider'} onClose={() => setModal(null)} title="Alterar Líder do grupo">
         <EscolhaPerfil
           perfis={lideres}
           vazio="Nenhum perfil de Líder cadastrado ainda."
+          atualId={modal?.atualId}
           selecionado={form.perfilId}
           onSelecionar={(id) => setForm({ ...form, perfilId: id })}
         />
-        <Button className="mt-4 w-full" onClick={designarLider} disabled={!form.perfilId}>
+        <p className="mt-3 text-xs font-medium text-warning">
+          Atenção: quem estava no cargo será removido do grupo, junto com as notas que recebeu como integrante.
+        </p>
+        {erroModal && <p className="mt-2 text-sm font-medium text-danger">{erroModal}</p>}
+        <Button className="mt-4 w-full" onClick={designarLider} disabled={!form.perfilId || form.perfilId === modal?.atualId}>
           Salvar líder
         </Button>
       </Modal>
 
-      <Modal open={modal?.tipo === 'vice'} onClose={() => setModal(null)} title="Designar Vice-Líder">
+      <Modal open={modal?.tipo === 'vice'} onClose={() => setModal(null)} title="Alterar Vice-Líder do grupo">
         <EscolhaPerfil
           perfis={vices}
           vazio="Nenhum perfil de Vice-Líder cadastrado ainda."
+          atualId={modal?.atualId}
           selecionado={form.perfilId}
           onSelecionar={(id) => setForm({ ...form, perfilId: id })}
         />
-        <Button className="mt-4 w-full" onClick={designarVice} disabled={!form.perfilId}>
+        <p className="mt-3 text-xs font-medium text-warning">
+          Atenção: quem estava no cargo será removido do grupo, junto com as notas que recebeu como integrante.
+        </p>
+        {erroModal && <p className="mt-2 text-sm font-medium text-danger">{erroModal}</p>}
+        <Button className="mt-4 w-full" onClick={designarVice} disabled={!form.perfilId || form.perfilId === modal?.atualId}>
           Salvar vice-líder
         </Button>
       </Modal>
@@ -559,11 +574,11 @@ function GrupoCard({ grupo, turmaId, onAbrir, onRemoverIntegrante, onDetalhe }) 
       </ul>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button size="sm" variant="secondary" onClick={() => onAbrir('lider', { grupoId: grupo.id, turmaId })}>
-          <Crown className="h-4 w-4" /> Líder
+        <Button size="sm" variant="secondary" onClick={() => onAbrir('lider', { grupoId: grupo.id, turmaId, atualId: grupo.lider_id })}>
+          <Crown className="h-4 w-4" /> Alterar líder
         </Button>
-        <Button size="sm" variant="outline" onClick={() => onAbrir('vice', { grupoId: grupo.id, turmaId })}>
-          <Shield className="h-4 w-4" /> Vice
+        <Button size="sm" variant="outline" onClick={() => onAbrir('vice', { grupoId: grupo.id, turmaId, atualId: grupo.vice_lider_id })}>
+          <Shield className="h-4 w-4" /> Alterar vice
         </Button>
         <Button
           size="sm"
@@ -586,39 +601,70 @@ function GrupoCard({ grupo, turmaId, onAbrir, onRemoverIntegrante, onDetalhe }) 
 }
 
 /**
- * Lista clicável de perfis (Líder/Vice-Líder) para designação.
+ * Lista de perfis (Líder ou Vice-Líder) para escolher quem assume o cargo.
+ * Tem campo de busca por nome ou e-mail e altura limitada com rolagem própria,
+ * para a janela não passar do tamanho da tela quando há muitos perfis.
+ * O perfil que ocupa o cargo hoje aparece marcado como "Atual".
  *
  * @param {Object} props Propriedades da escolha.
  * @param {Array<Object>} props.perfis Perfis disponíveis.
  * @param {string} props.vazio Mensagem quando não há perfis.
+ * @param {string} [props.atualId] UUID de quem ocupa o cargo agora.
  * @param {string} props.selecionado UUID selecionado.
  * @param {Function} props.onSelecionar Callback de seleção.
- * @returns {JSX.Element} Lista de escolha.
+ * @returns {JSX.Element} Lista de escolha com busca e rolagem.
  */
-function EscolhaPerfil({ perfis, vazio, selecionado, onSelecionar }) {
+function EscolhaPerfil({ perfis, vazio, atualId, selecionado, onSelecionar }) {
+  const [busca, setBusca] = useState('');
+
   if (perfis.length === 0) {
     return <p className="text-text-muted">{vazio}</p>;
   }
+
+  const termo = busca.trim().toLowerCase();
+  const filtrados = termo
+    ? perfis.filter((perfil) => `${perfil.nome} ${perfil.email}`.toLowerCase().includes(termo))
+    : perfis;
+
   return (
-    <div className="space-y-2">
-      {perfis.map((perfil) => (
-        <button
-          key={perfil.id}
-          type="button"
-          onClick={() => onSelecionar(perfil.id)}
-          className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
-            selecionado === perfil.id
-              ? 'border-primary bg-primary-soft'
-              : 'border-border bg-surface hover:bg-surface-muted'
-          }`}
-        >
-          <Avatar name={perfil.nome} className="h-8 w-8 text-xs" />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-text">{perfil.nome}</p>
-            <p className="truncate text-xs text-text-muted">{perfil.email}</p>
-          </div>
-        </button>
-      ))}
+    <div>
+      <input
+        type="search"
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+        placeholder="Buscar por nome ou e-mail"
+        className="h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm text-text placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
+      />
+
+      <div className="mt-3 max-h-[40vh] space-y-2 overflow-y-auto pr-1">
+        {filtrados.length === 0 ? (
+          <p className="py-4 text-center text-sm text-text-muted">Nenhum perfil encontrado.</p>
+        ) : (
+          filtrados.map((perfil) => (
+            <button
+              key={perfil.id}
+              type="button"
+              onClick={() => onSelecionar(perfil.id)}
+              className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
+                selecionado === perfil.id
+                  ? 'border-primary bg-primary-soft'
+                  : 'border-border bg-surface hover:bg-surface-muted'
+              }`}
+            >
+              <Avatar name={perfil.nome} className="h-8 w-8 shrink-0 text-xs" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-text">{perfil.nome}</p>
+                <p className="truncate text-xs text-text-muted">{perfil.email}</p>
+              </div>
+              {perfil.id === atualId && (
+                <span className="shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-xs font-bold text-primary">
+                  Atual
+                </span>
+              )}
+            </button>
+          ))
+        )}
+      </div>
     </div>
   );
 }
