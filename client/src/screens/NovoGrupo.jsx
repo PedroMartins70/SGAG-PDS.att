@@ -10,11 +10,11 @@ import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 
 /** Limite de integrantes por grupo. */
-const LIMITE_INTEGRANTES = 7;
+const LIMITE_INTEGRANTES = 10;
 
 /**
  * Página "Novo Grupo": cadastro completo de um grupo com nome, Líder,
- * Vice-Líder e integrantes (até 7), respeitando a identidade visual.
+ * Vice-Líder e integrantes (até 10), respeitando a identidade visual.
  *
  * @returns {JSX.Element} Página de novo grupo.
  */
@@ -58,7 +58,7 @@ export default function NovoGrupo() {
   const lideres = useMemo(() => perfis.filter((p) => p.role === 'lider'), [perfis]);
   const vices = useMemo(() => perfis.filter((p) => p.role === 'vice_lider'), [perfis]);
 
-  /** Adiciona um campo de integrante vazio (limite 7). */
+  /** Adiciona um campo de integrante vazio (limite 10). */
   function adicionarIntegrante() {
     setIntegrantes((atual) => (atual.length < LIMITE_INTEGRANTES ? [...atual, ''] : atual));
   }
@@ -195,7 +195,7 @@ export default function NovoGrupo() {
                     {preenchidos}/{LIMITE_INTEGRANTES}
                   </Badge>
                 </div>
-                <p className="mb-3 text-sm text-text-muted">Adicione os alunos do grupo (até 7).</p>
+                <p className="mb-3 text-sm text-text-muted">Adicione os alunos do grupo (até 10).</p>
 
                 {integrantes.length === 0 && (
                   <p className="mb-2 text-sm text-text-muted">Nenhum integrante adicionado ainda.</p>

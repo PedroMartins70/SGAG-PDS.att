@@ -115,14 +115,14 @@ export const criarGrupoSchema = z.object({
 
 /**
  * Schema de criação completa de um grupo (Novo Grupo):
- * nome, Líder, Vice-Líder e integrantes (até 7).
+ * nome, Líder, Vice-Líder e integrantes (até 10).
  */
 export const criarGrupoCompletoSchema = z.object({
   turma_id: z.string().uuid('Turma invalida'),
   nome: z.string().min(1, 'O nome do grupo e obrigatorio').max(100),
   lider_id: z.string().uuid('Perfil de lider invalido'),
   vice_lider_id: z.string().uuid('Perfil de vice-lider invalido'),
-  integrantes: z.array(z.string().min(1).max(255)).max(7).optional().default([]),
+  integrantes: z.array(z.string().min(1).max(255)).max(10).optional().default([]),
 });
 
 /**

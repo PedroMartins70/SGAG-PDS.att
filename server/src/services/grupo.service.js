@@ -7,7 +7,7 @@ import { urlsDasLogos } from './arquivo.service.js';
 export const LIMITE_GRUPOS_POR_TURMA = 7;
 
 /** Limite máximo de integrantes por grupo (regra de negócio). */
-export const LIMITE_INTEGRANTES_POR_GRUPO = 7;
+export const LIMITE_INTEGRANTES_POR_GRUPO = 10;
 
 /**
  * Busca uma turma pelo UUID e garante que ela existe.
@@ -220,7 +220,7 @@ export async function excluirGrupo({ grupoId, professorId }) {
 
 /**
  * Adiciona um integrante (aluno comum, sem conta) ao grupo,
- * respeitando o limite máximo de 7 integrantes.
+ * respeitando o limite máximo de 10 integrantes.
  * Pode ser feito pelo professor (qualquer grupo) ou pelo líder/vice-líder
  * (somente do próprio grupo).
  *
@@ -512,7 +512,7 @@ export async function obterMeuGrupo(userId) {
  * Cria um grupo de forma completa: define Líder, Vice-Líder e adiciona
  * os integrantes de uma única vez (fluxo "Novo Grupo").
  *
- * Respeita os limites: máx. 7 grupos por turma e máx. 7 integrantes por grupo.
+ * Respeita os limites: máx. 7 grupos por turma e máx. 10 integrantes por grupo.
  * O Líder e o Vice-Líder devem ser perfis já cadastrados com os papéis corretos.
  *
  * @param {Object} params Parâmetros da criação.
@@ -562,7 +562,7 @@ export async function criarGrupoCompleto({
     throw new AppError(400, 'O lider e o vice-lider devem ser pessoas diferentes');
   }
 
-  // Líder e Vice-Líder contam como integrantes do grupo (roster máximo 7).
+  // Líder e Vice-Líder contam como integrantes do grupo (roster máximo 10).
   const membros = [lider.nome, vice.nome].map((n) => String(n).trim()).filter(Boolean);
 
   const nomesAlunos = (integrantes || []).map((n) => String(n).trim()).filter(Boolean);

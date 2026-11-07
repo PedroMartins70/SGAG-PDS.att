@@ -28,14 +28,14 @@ import ContasSenhas from '../components/ContasSenhas.jsx';
 
 /** Limites de negócio. */
 const LIMITE_GRUPOS = 7;
-const LIMITE_INTEGRANTES = 7;
+const LIMITE_INTEGRANTES = 10;
 
 /** Estado inicial do formulário de cadastro de Líder/Vice/Avaliador. */
 const PERFIL_VAZIO = { email: '', nome: '', senha: '', role: 'lider', turmaIds: [] };
 
 /**
  * Página de cadastro de grupos (visão do Professor).
- * Permite criar até 7 grupos por turma, adicionar até 7 integrantes por grupo
+ * Permite criar até 7 grupos por turma, adicionar até 10 integrantes por grupo
  * e designar Líder e Vice-Líder. Também tem o botão "Contas e senhas", para o
  * professor gerar uma senha temporária para quem esqueceu a senha.
  * No cadastro de Avaliador, o professor escolhe as turmas que ele poderá ver.
@@ -229,7 +229,7 @@ export default function Grupos() {
             </Button>
             <div className="leading-tight">
               <h1 className="font-display text-lg font-bold text-text">Cadastro de Grupos</h1>
-              <p className="text-xs text-text-muted">Até 7 grupos por turma e 7 integrantes por grupo.</p>
+              <p className="text-xs text-text-muted">Até 7 grupos por turma e 10 integrantes por grupo.</p>
             </div>
           </div>
           <div className="flex items-center gap-2">

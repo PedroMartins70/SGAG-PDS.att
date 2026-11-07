@@ -26,7 +26,7 @@ const CRITERIOS = [
 const BIMESTRES = [1, 2, 3, 4];
 
 /** Limite de integrantes por grupo (igual ao do servidor). */
-const LIMITE_INTEGRANTES = 7;
+const LIMITE_INTEGRANTES = 10;
 
 /** Abas da tela. */
 const ABAS = [
@@ -46,7 +46,7 @@ const vazio = () => Object.fromEntries(CRITERIOS.map((c) => [c.key, '']));
  *   leitura até o Professor liberar a avaliação daquele bimestre. Mesmo
  *   liberado, o Vice não altera notas que o Líder já deu. Uma avaliação já
  *   alterada pelo professor fica travada para o Líder/Vice-Líder. Também
- *   permite adicionar integrantes ao próprio grupo (até 7).
+ *   permite adicionar integrantes ao próprio grupo (até 10).
  * - Notas da banca: mostra (somente leitura) as notas e comentários dos
  *   avaliadores da banca para o grupo, por bimestre.
  * - Materiais: slides das aulas da turma e modelo do trabalho escrito (só ver, abrir e baixar).

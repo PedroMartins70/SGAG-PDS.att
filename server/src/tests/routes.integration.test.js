@@ -417,11 +417,11 @@ describe('Integracao completa da API /api (TDD)', () => {
     expect(res.body.integrante.nome_aluno).toBe('Carlos');
   });
 
-  it('POST /api/grupos/:grupoId/integrantes bloqueia o 8o integrante (HTTP 400)', async () => {
+  it('POST /api/grupos/:grupoId/integrantes bloqueia o 11o integrante (HTTP 400)', async () => {
     const supabase = holder.supabase;
     const token = autenticarComo(supabase, PERFIL_PROFESSOR);
     supabase.queue('grupos', { data: GRUPO, error: null });
-    supabase.queue('integrantes', { data: [], error: null, count: 7 });
+    supabase.queue('integrantes', { data: [], error: null, count: 10 });
 
     const res = await request(app)
       .post('/api/grupos/g1/integrantes')

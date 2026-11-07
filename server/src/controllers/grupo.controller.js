@@ -96,7 +96,7 @@ export const excluirGrupo = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/grupos/:grupoId/integrantes — Adiciona integrante (professor, líder ou
- * vice-líder do grupo). Valida limite de 7.
+ * vice-líder do grupo). Valida limite de 10.
  */
 export const adicionarIntegrante = asyncHandler(async (req, res) => {
   const { grupoId } = req.params;
