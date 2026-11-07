@@ -4,6 +4,7 @@ import { cn } from '../../lib/cn.js';
  * Botão do design system Soft Dashboard.
  * Confortável e de fácil leitura: altura generosa (alvo de toque ≥ 44px),
  * cantos arredondados, contraste elevado e microinteração sutil no clique.
+ * O texto nunca quebra em várias linhas dentro do botão.
  *
  * @param {Object} props Propriedades do botão.
  * @param {React.ReactNode} props.children Conteúdo do botão.
@@ -22,7 +23,7 @@ export default function Button({
   ...props
 }) {
   const base =
-    'inline-flex items-center justify-center gap-2 rounded-xl font-semibold leading-none ' +
+    'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold leading-none ' +
     'select-none transition-all duration-150 ease-out ' +
     'disabled:opacity-50 disabled:cursor-not-allowed ' +
     'active:scale-[0.98]';

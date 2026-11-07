@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Clock, Crown, Loader2, Lock, Pencil, Plus, Shield, Trash2, Unlock, UserX } from 'lucide-react';
+import { ArrowLeft, Clock, Crown, Loader2, Pencil, Plus, Shield, Trash2, UserX } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
 import Badge from '../components/ui/Badge.jsx';
@@ -33,10 +33,6 @@ const critVazio = () => Object.fromEntries(CRITERIOS.map((c) => [c.key, '']));
  * as avaliações da banca e os arquivos do projeto enviados pelo líder/vice.
  * A edição de avaliação exige justificativa.
  *
- * Também tem o botão que LIBERA (ou retira a liberação) da avaliação do
- * Vice-Líder no bimestre selecionado. Por padrão, só o Líder avalia; o
- * professor libera o vice quando o líder não puder avaliar.
- *
  * @returns {JSX.Element} Página de detalhe do grupo.
  */
 export default function DetalheGrupo() {
@@ -51,12 +47,6 @@ export default function DetalheGrupo() {
   const [erro, setErro] = useState('');
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({ nome: '', integrante: '', justificativa: '', crit: critVazio() });
-  const [liberando, setLiberando] = useState(false);
-  const [erroLiberacao, setErroLiberacao] = useState('');
-  const [perfis, setPerfis] = useState([]);
-  const [perfilEscolhido, setPerfilEscolhido] = useState('');
-  const [erroPapel, setErroPapel] = useState('');
-  const [salvandoPapel, setSalvandoPapel] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -123,61 +113,6 @@ export default function DetalheGrupo() {
     await carregar();
   }
 
-  /**
-   * Libera ou retira a liberação da avaliação do vice-líder no bimestre
-   * selecionado. As notas que o vice já deu não são apagadas.
-   */
-  async function alternarLiberacaoVice() {
-    setLiberando(true);
-    setErroLiberacao('');
-    try {
-      await api(`/grupos/${grupoId}/liberacao-vice`, {
-        method: 'PUT',
-        token,
-        body: { bimestre, liberado: !grupo.vice_liberado },
-      });
-      await carregar();
-    } catch (e) {
-      setErroLiberacao(e.message || 'Nao foi possivel alterar a liberacao.');
-    } finally {
-      setLiberando(false);
-    }
-  }
-
-  /**
-   * Abre a janela para trocar o Líder ou o Vice-Líder do grupo e carrega os
-   * perfis disponíveis.
-   *
-   * @param {'trocarLider'|'trocarVice'} tipo Cargo que será trocado.
-   */
-  async function abrirTrocaPapel(tipo) {
-    setErroPapel('');
-    setPerfilEscolhido('');
-    setModal({ tipo });
-    try {
-      const { perfis: lista } = await api('/profiles', { token });
-      setPerfis(lista);
-    } catch (e) {
-      setErroPapel(e.message || 'Nao foi possivel carregar os perfis.');
-    }
-  }
-
-  /** Salva o novo Líder ou Vice-Líder; se o servidor recusar, mostra o motivo na janela. */
-  async function salvarPapel() {
-    setSalvandoPapel(true);
-    setErroPapel('');
-    try {
-      const rota = modal.tipo === 'trocarLider' ? 'lider' : 'vice-lider';
-      await api(`/grupos/${grupoId}/${rota}`, { method: 'PUT', token, body: { perfil_id: perfilEscolhido } });
-      setModal(null);
-      await carregar();
-    } catch (e) {
-      setErroPapel(e.message || 'Nao foi possivel salvar a alteracao.');
-    } finally {
-      setSalvandoPapel(false);
-    }
-  }
-
   if (carregando && !grupo) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-canvas">
@@ -198,14 +133,12 @@ export default function DetalheGrupo() {
     );
   }
 
-  const viceLiberado = Boolean(grupo.vice_liberado);
-  const temVice = Boolean(grupo.vice?.id);
-
   return (
     <div className="min-h-screen bg-canvas">
-      <header className="sticky top-0 z-10 border-b border-border bg-surface/80 backdrop-blur">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-3">
+      {/* No celular o cabeçalho tem duas linhas (título e botões) e não fica preso no topo. */}
+      <header className="relative z-10 border-b border-border bg-surface/80 backdrop-blur sm:sticky sm:top-0">
+        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
+          <div className="flex w-full min-w-0 items-center gap-3 sm:w-auto">
             <Button variant="ghost" size="sm" onClick={() => navigate('/grupos')}>
               <ArrowLeft className="h-4 w-4" /> Voltar
             </Button>
@@ -216,9 +149,9 @@ export default function DetalheGrupo() {
                 className="h-10 w-10 shrink-0 rounded-lg border border-border object-cover"
               />
             )}
-            <div className="leading-tight">
-              <h1 className="font-display text-lg font-bold text-text">{grupo.nome}</h1>
-              <p className="text-xs text-text-muted">Detalhe e avaliações do grupo</p>
+            <div className="min-w-0 leading-tight">
+              <h1 className="break-words font-display text-lg font-bold text-text sm:truncate">{grupo.nome}</h1>
+              <p className="text-xs text-text-muted sm:truncate">Detalhe e avaliações do grupo</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -261,71 +194,23 @@ export default function DetalheGrupo() {
           </div>
         </div>
 
-        {/* Liberação da avaliação para o Vice-Líder (vale para o bimestre selecionado) */}
-        <Card className="mb-6 flex flex-wrap items-center justify-between gap-3 p-4">
-          <div className="min-w-0 flex-1">
-            <p className="flex items-center gap-2 text-sm font-bold text-text">
-              {viceLiberado ? (
-                <Unlock className="h-4 w-4 text-success" />
-              ) : (
-                <Lock className="h-4 w-4 text-text-muted" />
-              )}
-              Avaliação do Vice-Líder — {bimestre}º bimestre
-              <Badge tone={viceLiberado ? 'aluno' : 'professor'}>{viceLiberado ? 'Liberada' : 'Bloqueada'}</Badge>
+        {/* Resumo: Líder, Vice, média (grid-cols-1 limita a coluna à largura da tela no celular) */}
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Card className="min-w-0 p-4">
+            <p className="mb-1 flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-badge-lider-text">
+              <Crown className="h-4 w-4" /> Líder
             </p>
-            <p className="mt-1 text-xs text-text-muted">
-              {!temVice
-                ? 'Este grupo ainda não tem Vice-Líder definido.'
-                : viceLiberado
-                  ? 'O Vice-Líder pode dar notas neste bimestre (o Líder também continua podendo). Ele não sobrescreve notas que o Líder já deu.'
-                  : 'Somente o Líder avalia. Libere caso o Líder não possa avaliar neste bimestre.'}
+            <p className="break-words font-semibold text-text sm:truncate">{grupo.lider?.nome ?? '—'}</p>
+            <p className="break-all text-xs text-text-muted sm:truncate">{grupo.lider?.email}</p>
+          </Card>
+          <Card className="min-w-0 p-4">
+            <p className="mb-1 flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-badge-vice-text">
+              <Shield className="h-4 w-4" /> Vice-Líder
             </p>
-            {erroLiberacao && <p className="mt-1 text-xs font-medium text-danger">{erroLiberacao}</p>}
-          </div>
-          <Button
-            size="sm"
-            variant={viceLiberado ? 'outline' : 'success'}
-            onClick={alternarLiberacaoVice}
-            disabled={liberando || !temVice}
-          >
-            {liberando ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : viceLiberado ? (
-              <Lock className="h-4 w-4" />
-            ) : (
-              <Unlock className="h-4 w-4" />
-            )}
-            {viceLiberado ? 'Retirar liberação' : 'Liberar para o Vice'}
-          </Button>
-        </Card>
-
-        {/* Resumo: Líder, Vice, média */}
-        <div className="mb-6 grid gap-3 sm:grid-cols-3">
-          <Card className="p-4">
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <p className="flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-badge-lider-text">
-                <Crown className="h-4 w-4" /> Líder
-              </p>
-              <Button size="sm" variant="ghost" onClick={() => abrirTrocaPapel('trocarLider')}>
-                <Pencil className="h-3.5 w-3.5" /> Alterar
-              </Button>
-            </div>
-            <p className="truncate font-semibold text-text">{grupo.lider?.nome ?? '—'}</p>
-            <p className="truncate text-xs text-text-muted">{grupo.lider?.email}</p>
+            <p className="break-words font-semibold text-text sm:truncate">{grupo.vice?.nome ?? '—'}</p>
+            <p className="break-all text-xs text-text-muted sm:truncate">{grupo.vice?.email}</p>
           </Card>
-          <Card className="p-4">
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <p className="flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-badge-vice-text">
-                <Shield className="h-4 w-4" /> Vice-Líder
-              </p>
-              <Button size="sm" variant="ghost" onClick={() => abrirTrocaPapel('trocarVice')}>
-                <Pencil className="h-3.5 w-3.5" /> Alterar
-              </Button>
-            </div>
-            <p className="truncate font-semibold text-text">{grupo.vice?.nome ?? '—'}</p>
-            <p className="truncate text-xs text-text-muted">{grupo.vice?.email}</p>
-          </Card>
-          <Card className="p-4">
+          <Card className="min-w-0 p-4">
             <p className="mb-1 text-xs font-bold uppercase tracking-wide text-text-muted">
               Média do {bimestre}º bimestre
             </p>
@@ -396,40 +281,6 @@ export default function DetalheGrupo() {
         </div>
       </Modal>
 
-      {/* Modal trocar Líder / Vice-Líder */}
-      <Modal
-        open={modal?.tipo === 'trocarLider' || modal?.tipo === 'trocarVice'}
-        onClose={() => setModal(null)}
-        title={modal?.tipo === 'trocarLider' ? 'Alterar Líder do grupo' : 'Alterar Vice-Líder do grupo'}
-      >
-        <EscolhaPerfil
-          perfis={perfis.filter((p) => p.role === (modal?.tipo === 'trocarLider' ? 'lider' : 'vice_lider'))}
-          vazio={
-            modal?.tipo === 'trocarLider'
-              ? 'Nenhum perfil de Líder cadastrado ainda.'
-              : 'Nenhum perfil de Vice-Líder cadastrado ainda.'
-          }
-          atualId={modal?.tipo === 'trocarLider' ? grupo.lider?.id : grupo.vice?.id}
-          selecionado={perfilEscolhido}
-          onSelecionar={setPerfilEscolhido}
-        />
-        <p className="mt-3 text-xs font-medium text-warning">
-          Atenção: quem estava no cargo será removido do grupo, junto com as notas que recebeu como integrante.
-        </p>
-        {erroPapel && <p className="mt-2 text-sm font-medium text-danger">{erroPapel}</p>}
-        <Button
-          className="mt-4 w-full"
-          onClick={salvarPapel}
-          disabled={
-            !perfilEscolhido ||
-            salvandoPapel ||
-            perfilEscolhido === (modal?.tipo === 'trocarLider' ? grupo.lider?.id : grupo.vice?.id)
-          }
-        >
-          {salvandoPapel ? 'Salvando...' : 'Salvar'}
-        </Button>
-      </Modal>
-
       {/* Modal editar avaliação (justificativa obrigatória) */}
       <Modal
         open={modal?.tipo === 'avaliacao'}
@@ -468,10 +319,10 @@ function LinhaIntegrante({ integrante, grupo, onAvaliar, onRenomear, onExcluir }
   const isVice = integrante.nome_aluno === grupo.vice?.nome;
 
   return (
-    <Card className="flex flex-wrap items-center gap-3 p-4">
+    <Card className="flex min-w-0 flex-wrap items-center gap-3 p-4">
       <Avatar name={integrante.nome_aluno} />
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-2 font-semibold text-text">
+        <p className="flex flex-wrap items-center gap-2 break-words font-semibold text-text">
           {integrante.nome_aluno}
           {isLider && (
             <span className="inline-flex items-center gap-1 rounded-full bg-badge-lider px-2 py-0.5 text-xs font-bold text-badge-lider-text">
@@ -497,10 +348,10 @@ function LinhaIntegrante({ integrante, grupo, onAvaliar, onRenomear, onExcluir }
         <Button size="sm" onClick={onAvaliar}>
           {av ? 'Ver/Editar nota' : 'Avaliar'}
         </Button>
-        <Button size="sm" variant="outline" onClick={onRenomear}>
+        <Button size="sm" variant="outline" aria-label="Renomear integrante" onClick={onRenomear}>
           <Pencil className="h-4 w-4" />
         </Button>
-        <Button size="sm" variant="ghost" onClick={onExcluir}>
+        <Button size="sm" variant="ghost" aria-label="Excluir integrante" onClick={onExcluir}>
           <Trash2 className="h-4 w-4 text-danger" />
         </Button>
       </div>
@@ -595,75 +446,6 @@ function AvaliacaoProfessor({ crit, justificativa, onChangeCrit, onChangeJustifi
       <Button variant="success" className="w-full" onClick={onSalvar} disabled={!pronto}>
         Salvar e Confirmar
       </Button>
-    </div>
-  );
-}
-
-/**
- * Lista de perfis (Líder ou Vice-Líder) para escolher quem assume o cargo.
- * Tem campo de busca por nome ou e-mail e altura limitada com rolagem própria,
- * para a janela não passar do tamanho da tela quando há muitos perfis.
- * O perfil que ocupa o cargo hoje aparece marcado como "Atual".
- *
- * @param {Object} props Propriedades da escolha.
- * @param {Array<Object>} props.perfis Perfis disponíveis.
- * @param {string} props.vazio Mensagem quando não há perfis.
- * @param {string} [props.atualId] UUID de quem ocupa o cargo agora.
- * @param {string} props.selecionado UUID selecionado.
- * @param {Function} props.onSelecionar Callback de seleção.
- * @returns {JSX.Element} Lista de escolha com busca e rolagem.
- */
-function EscolhaPerfil({ perfis, vazio, atualId, selecionado, onSelecionar }) {
-  const [busca, setBusca] = useState('');
-
-  if (perfis.length === 0) {
-    return <p className="text-text-muted">{vazio}</p>;
-  }
-
-  const termo = busca.trim().toLowerCase();
-  const filtrados = termo
-    ? perfis.filter((perfil) => `${perfil.nome} ${perfil.email}`.toLowerCase().includes(termo))
-    : perfis;
-
-  return (
-    <div>
-      <input
-        type="search"
-        value={busca}
-        onChange={(e) => setBusca(e.target.value)}
-        placeholder="Buscar por nome ou e-mail"
-        className="h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm text-text placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
-      />
-
-      <div className="mt-3 max-h-[40vh] space-y-2 overflow-y-auto pr-1">
-        {filtrados.length === 0 ? (
-          <p className="py-4 text-center text-sm text-text-muted">Nenhum perfil encontrado.</p>
-        ) : (
-          filtrados.map((perfil) => (
-            <button
-              key={perfil.id}
-              type="button"
-              onClick={() => onSelecionar(perfil.id)}
-              className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
-                selecionado === perfil.id
-                  ? 'border-primary bg-primary-soft'
-                  : 'border-border bg-surface hover:bg-surface-muted'
-              }`}
-            >
-              <Avatar name={perfil.nome} className="h-8 w-8 shrink-0 text-xs" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-text">{perfil.nome}</p>
-                <p className="truncate text-xs text-text-muted">{perfil.email}</p>
-              </div>
-              {perfil.id === atualId && (
-                <span className="shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-xs font-bold text-primary">
-                  Atual
-                </span>
-              )}
-            </button>
-          ))
-        )}
-      </div>
     </div>
   );
 }

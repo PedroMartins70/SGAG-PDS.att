@@ -9,12 +9,16 @@ import ThemeToggle from '../components/ui/ThemeToggle.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 
-/** Limite de integrantes por grupo. */
-const LIMITE_INTEGRANTES = 10;
+/**
+ * Limite de alunos que podem ser cadastrados junto com o grupo.
+ * O grupo tem no máximo 7 integrantes e o líder e o vice já contam entre eles.
+ */
+const LIMITE_INTEGRANTES = 5;
 
 /**
- * Página "Novo Grupo": cadastro completo de um grupo com nome, Líder,
- * Vice-Líder e integrantes (até 10), respeitando a identidade visual.
+ * Página "Novo Grupo": cadastro de um grupo com nome, Líder e Vice-Líder.
+ * Os alunos são opcionais (até 5 aqui): o Líder e o Vice-Líder podem adicionar
+ * os demais integrantes depois, pela tela deles.
  *
  * @returns {JSX.Element} Página de novo grupo.
  */
@@ -58,7 +62,7 @@ export default function NovoGrupo() {
   const lideres = useMemo(() => perfis.filter((p) => p.role === 'lider'), [perfis]);
   const vices = useMemo(() => perfis.filter((p) => p.role === 'vice_lider'), [perfis]);
 
-  /** Adiciona um campo de integrante vazio (limite 10). */
+  /** Adiciona um campo de integrante vazio (limite de 5). */
   function adicionarIntegrante() {
     setIntegrantes((atual) => (atual.length < LIMITE_INTEGRANTES ? [...atual, ''] : atual));
   }
@@ -104,23 +108,24 @@ export default function NovoGrupo() {
     }
   }
 
-  const podeEnviar =
-    !enviando && nome.trim() && liderId && viceId && preenchidos >= 1 && preenchidos <= LIMITE_INTEGRANTES;
+  const podeEnviar = !enviando && nome.trim() && liderId && viceId && preenchidos <= LIMITE_INTEGRANTES;
 
   return (
     <div className="min-h-screen bg-canvas">
       <header className="sticky top-0 z-10 border-b border-border bg-surface/80 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/grupos')}>
-              <ArrowLeft className="h-4 w-4" /> Voltar
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <Button variant="ghost" size="sm" aria-label="Voltar" onClick={() => navigate('/grupos')}>
+              <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">Voltar</span>
             </Button>
-            <div className="leading-tight">
+            <div className="min-w-0 leading-tight">
               <h1 className="font-display text-lg font-bold text-text">Novo Grupo</h1>
-              <p className="text-xs text-text-muted">Turma {turma?.nome ?? ''}</p>
+              <p className="truncate text-xs text-text-muted">Turma {turma?.nome ?? ''}</p>
             </div>
           </div>
-          <ThemeToggle />
+          <div className="shrink-0">
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
@@ -128,7 +133,7 @@ export default function NovoGrupo() {
         {carregando ? (
           <p className="text-text-muted">Carregando...</p>
         ) : (
-          <Card className="p-6 sm:p-8">
+          <Card className="min-w-0 p-6 sm:p-8">
             {erro && (
               <div className="mb-4 rounded-lg border border-danger-soft bg-danger-soft px-3 py-2 text-sm font-medium text-danger">
                 {erro}
@@ -148,14 +153,14 @@ export default function NovoGrupo() {
                 />
               </div>
 
-              {/* Líder e Vice-Líder */}
+              {/* Líder e Vice-Líder (grid-cols-1 limita a coluna à largura da tela no celular) */}
               <div>
                 <h2 className="mb-3 font-display text-lg font-bold text-text">Líder e Vice-Líder</h2>
                 <p className="mb-3 text-sm text-text-muted">
                   Escolha entre os perfis de Líder e Vice-Líder que você já cadastrou.
                 </p>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="min-w-0">
                     <label className="mb-1.5 block text-sm font-semibold text-text">Líder</label>
                     <div className="relative">
                       <Crown className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-secondary" />
@@ -167,7 +172,7 @@ export default function NovoGrupo() {
                       />
                     </div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <label className="mb-1.5 block text-sm font-semibold text-text">Vice-Líder</label>
                     <div className="relative">
                       <Shield className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-primary" />
@@ -187,15 +192,19 @@ export default function NovoGrupo() {
                 )}
               </div>
 
-              {/* Integrantes */}
+              {/* Integrantes (opcional) */}
               <div>
                 <div className="mb-3 flex items-center justify-between gap-2">
-                  <h2 className="font-display text-lg font-bold text-text">Integrantes</h2>
+                  <h2 className="font-display text-lg font-bold text-text">Integrantes (opcional)</h2>
                   <Badge tone="aluno">
                     {preenchidos}/{LIMITE_INTEGRANTES}
                   </Badge>
                 </div>
-                <p className="mb-3 text-sm text-text-muted">Adicione os alunos do grupo (até 10).</p>
+                <p className="mb-3 text-sm text-text-muted">
+                  Não é obrigatório. O Líder e o Vice-Líder poderão adicionar os demais alunos depois, pela tela
+                  deles. Se quiser, você já pode cadastrar até {LIMITE_INTEGRANTES} alunos aqui (o Líder e o Vice
+                  contam entre os 7 do grupo).
+                </p>
 
                 {integrantes.length === 0 && (
                   <p className="mb-2 text-sm text-text-muted">Nenhum integrante adicionado ainda.</p>

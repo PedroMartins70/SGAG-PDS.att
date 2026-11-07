@@ -92,9 +92,10 @@ export default function AvaliadorGrupo() {
 
   return (
     <div className="min-h-screen bg-canvas">
-      <header className="sticky top-0 z-10 border-b border-border bg-surface/80 backdrop-blur">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-3">
+      {/* No celular o cabeçalho tem duas linhas (título e botões) e não fica preso no topo. */}
+      <header className="relative z-10 border-b border-border bg-surface/80 backdrop-blur sm:sticky sm:top-0">
+        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
+          <div className="flex w-full min-w-0 items-center gap-3 sm:w-auto">
             <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
               <ArrowLeft className="h-4 w-4" /> Voltar
             </Button>
@@ -105,9 +106,9 @@ export default function AvaliadorGrupo() {
                 className="h-10 w-10 shrink-0 rounded-lg border border-border object-cover"
               />
             )}
-            <div className="leading-tight">
-              <h1 className="font-display text-lg font-bold text-text">{grupo.nome}</h1>
-              <p className="text-xs text-text-muted">Avaliação, notas, arquivos e histórico do grupo</p>
+            <div className="min-w-0 leading-tight">
+              <h1 className="break-words font-display text-lg font-bold text-text sm:truncate">{grupo.nome}</h1>
+              <p className="text-xs text-text-muted sm:truncate">Avaliação, notas, arquivos e histórico do grupo</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -141,23 +142,23 @@ export default function AvaliadorGrupo() {
           </div>
         </div>
 
-        {/* Resumo: Líder, Vice, média */}
-        <div className="mb-6 grid gap-3 sm:grid-cols-3">
-          <Card className="p-4">
+        {/* Resumo: Líder, Vice, média (grid-cols-1 limita a coluna à largura da tela no celular) */}
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Card className="min-w-0 p-4">
             <p className="mb-1 flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-badge-lider-text">
               <Crown className="h-4 w-4" /> Líder
             </p>
-            <p className="truncate font-semibold text-text">{grupo.lider?.nome ?? '—'}</p>
-            <p className="truncate text-xs text-text-muted">{grupo.lider?.email}</p>
+            <p className="break-words font-semibold text-text sm:truncate">{grupo.lider?.nome ?? '—'}</p>
+            <p className="break-all text-xs text-text-muted sm:truncate">{grupo.lider?.email}</p>
           </Card>
-          <Card className="p-4">
+          <Card className="min-w-0 p-4">
             <p className="mb-1 flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-badge-vice-text">
               <Shield className="h-4 w-4" /> Vice-Líder
             </p>
-            <p className="truncate font-semibold text-text">{grupo.vice?.nome ?? '—'}</p>
-            <p className="truncate text-xs text-text-muted">{grupo.vice?.email}</p>
+            <p className="break-words font-semibold text-text sm:truncate">{grupo.vice?.nome ?? '—'}</p>
+            <p className="break-all text-xs text-text-muted sm:truncate">{grupo.vice?.email}</p>
           </Card>
-          <Card className="p-4">
+          <Card className="min-w-0 p-4">
             <p className="mb-1 text-xs font-bold uppercase tracking-wide text-text-muted">
               Média do {bimestre}º bimestre
             </p>
@@ -216,11 +217,11 @@ function LinhaNota({ integrante, grupo }) {
   const isVice = integrante.nome_aluno === grupo.vice?.nome;
 
   return (
-    <Card className="p-4">
+    <Card className="min-w-0 p-4">
       <div className="flex flex-wrap items-center gap-3">
         <Avatar name={integrante.nome_aluno} />
         <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-center gap-2 font-semibold text-text">
+          <p className="flex flex-wrap items-center gap-2 break-words font-semibold text-text">
             {integrante.nome_aluno}
             {isLider && (
               <span className="inline-flex items-center gap-1 rounded-full bg-badge-lider px-2 py-0.5 text-xs font-bold text-badge-lider-text">
@@ -261,7 +262,7 @@ function LinhaNota({ integrante, grupo }) {
       )}
 
       {av?.comentario_esclarecimento && (
-        <p className="mt-3 rounded-lg bg-canvas px-3 py-2 text-sm text-text">
+        <p className="mt-3 break-words rounded-lg bg-canvas px-3 py-2 text-sm text-text">
           "{av.comentario_esclarecimento}"
         </p>
       )}

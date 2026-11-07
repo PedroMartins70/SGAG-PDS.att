@@ -80,6 +80,8 @@
   .robo-container {
     left: 8px;
     gap: 8px;
+    /* sobe o robô um pouco para ficar melhor de ver (e longe da barra do navegador) */
+    bottom: calc(28px + env(safe-area-inset-bottom, 0px));
   }
 
   .robo-img {

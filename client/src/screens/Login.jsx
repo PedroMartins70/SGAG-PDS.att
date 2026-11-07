@@ -141,8 +141,8 @@ export default function Login() {
       </div>
 
       {/* Coluna direita — formulário
-          (pb-28 / sm:pb-40 reservam espaço embaixo no celular e tablet para o robô) */}
-      <div className="flex w-full items-center justify-center p-4 pb-28 sm:pb-40 lg:w-1/2 lg:pb-4">
+          (pb-36 / sm:pb-40 reservam espaço embaixo no celular e tablet para o robô) */}
+      <div className="flex w-full items-center justify-center p-4 pb-36 sm:pb-40 lg:w-1/2 lg:pb-4">
         <Card className="w-full max-w-md p-6 sm:p-8">
           <div className="mb-6 flex flex-col items-center gap-3 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-soft">

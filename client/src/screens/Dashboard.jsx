@@ -39,8 +39,9 @@ export default function Dashboard() {
 
   const token = session?.token;
   const role = session?.user?.role;
+  const professor = role === 'professor';
   const verTurmas = role === 'professor' || role === 'avaliador';
-  const mostrandoMateriais = role === 'professor' && visao === 'materiais';
+  const mostrandoMateriais = professor && visao === 'materiais';
 
   useEffect(() => {
     if (!verTurmas) return;
@@ -136,18 +137,32 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-canvas">
-      <header className="sticky top-0 z-10 border-b border-border bg-surface/80 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-3">
-            <LogoEscola />
-            <Mascot className="h-9 w-9" />
-            <div className="leading-tight">
+      {/* No celular, o cabeçalho do professor tem duas linhas e por isso não fica preso no topo. */}
+      <header
+        className={`z-10 border-b border-border bg-surface/80 backdrop-blur ${
+          professor ? 'relative sm:sticky sm:top-0' : 'sticky top-0'
+        }`}
+      >
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
+          <div
+            className={`flex min-w-0 items-center gap-3 ${professor ? 'w-full sm:w-auto' : 'flex-1 sm:flex-none'}`}
+          >
+            <div className="shrink-0">
+              <LogoEscola />
+            </div>
+            <Mascot className="h-9 w-9 shrink-0" />
+            <div className="min-w-0 leading-tight">
               <h1 className="font-display text-lg font-bold text-text">{titulo}</h1>
-              <p className="text-xs text-text-muted">{session?.user?.nome}</p>
+              <p className="truncate text-xs text-text-muted">{session?.user?.nome}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {role === 'professor' && (
+
+          <div
+            className={`flex items-center gap-2 ${
+              professor ? 'w-full flex-wrap sm:w-auto sm:flex-nowrap' : 'shrink-0'
+            }`}
+          >
+            {professor && (
               <>
                 <Button
                   variant={mostrandoMateriais ? 'primary' : 'outline'}
@@ -156,14 +171,21 @@ export default function Dashboard() {
                 >
                   <FolderOpen className="h-4 w-4" /> {mostrandoMateriais ? 'Turmas' : 'Materiais'}
                 </Button>
-                <Button variant="secondary" size="sm" onClick={() => navigate('/grupos')}>
-                  <ClipboardList className="h-4 w-4" /> Cadastro de Grupos
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  aria-label="Cadastro de Grupos"
+                  onClick={() => navigate('/grupos')}
+                >
+                  <ClipboardList className="h-4 w-4" />
+                  <span className="sm:hidden">Grupos</span>
+                  <span className="hidden sm:inline">Cadastro de Grupos</span>
                 </Button>
               </>
             )}
             <ThemeToggle />
-            <Button variant="outline" size="sm" onClick={sair}>
-              <LogOut className="h-4 w-4" /> Sair
+            <Button variant="outline" size="sm" aria-label="Sair" onClick={sair}>
+              <LogOut className="h-4 w-4" /> <span className="hidden sm:inline">Sair</span>
             </Button>
           </div>
         </div>
@@ -184,6 +206,9 @@ export default function Dashboard() {
  * enviada pelo líder/vice (ou a inicial do nome). O clique leva à tela de
  * detalhe do professor ou à tela de consulta do avaliador.
  * O avaliador vê apenas as turmas às quais foi vinculado.
+ *
+ * No celular os cartões ocupam exatamente a largura da tela e o nome do grupo
+ * quebra de linha (no computador, nomes muito longos ficam com "...").
  *
  * @param {Object} props Propriedades da visão.
  * @param {Object} props.dados Dados carregados (turmas e grupos por turma).
@@ -209,12 +234,13 @@ function VisaoTurmas({ dados, avaliador }) {
         </Card>
       )}
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      {/* grid-cols-1 limita a coluna à largura da tela (sem isso, nomes longos empurram o cartão para fora) */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         {turmas.map((turma) => {
           const grupos = dados?.gruposPorTurma?.[turma.id] ?? [];
           return (
-            <Card key={turma.id} className="p-5">
-              <div className="mb-3 flex items-center justify-between">
+            <Card key={turma.id} className="min-w-0 p-5">
+              <div className="mb-3 flex items-center justify-between gap-2">
                 <h3 className="font-display text-xl font-bold text-primary">Turma {turma.nome}</h3>
                 <Badge tone="professor">{grupos.length} grupos</Badge>
               </div>
@@ -226,7 +252,7 @@ function VisaoTurmas({ dados, avaliador }) {
                   <li
                     key={grupo.id}
                     onClick={() => navigate(avaliador ? `/avaliador/grupos/${grupo.id}` : `/grupos/${grupo.id}`)}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm font-medium text-text transition-colors hover:border-primary hover:bg-primary-soft"
+                    className="flex min-w-0 cursor-pointer items-center gap-3 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm font-medium text-text transition-colors hover:border-primary hover:bg-primary-soft"
                   >
                     {grupo.logo_url ? (
                       <img
@@ -235,9 +261,9 @@ function VisaoTurmas({ dados, avaliador }) {
                         className="h-8 w-8 shrink-0 rounded-md border border-border object-cover"
                       />
                     ) : (
-                      <Avatar name={grupo.nome} className="h-8 w-8 text-xs" />
+                      <Avatar name={grupo.nome} className="h-8 w-8 shrink-0 text-xs" />
                     )}
-                    <span className="truncate">{grupo.nome}</span>
+                    <span className="min-w-0 flex-1 break-words sm:truncate">{grupo.nome}</span>
                   </li>
                 ))}
               </ul>

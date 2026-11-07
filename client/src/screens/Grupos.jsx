@@ -27,18 +27,14 @@ import { useAuth } from '../auth/AuthContext.jsx';
 import ContasSenhas from '../components/ContasSenhas.jsx';
 
 /** Limites de negócio. */
-const LIMITE_GRUPOS = 7;
-const LIMITE_INTEGRANTES = 10;
-
-/** Estado inicial do formulário de cadastro de Líder/Vice/Avaliador. */
-const PERFIL_VAZIO = { email: '', nome: '', senha: '', role: 'lider', turmaIds: [] };
+const LIMITE_GRUPOS = 5;
+const LIMITE_INTEGRANTES = 7;
 
 /**
  * Página de cadastro de grupos (visão do Professor).
- * Permite criar até 7 grupos por turma, adicionar até 10 integrantes por grupo
+ * Permite criar até 5 grupos por turma, adicionar até 7 integrantes por grupo
  * e designar Líder e Vice-Líder. Também tem o botão "Contas e senhas", para o
  * professor gerar uma senha temporária para quem esqueceu a senha.
- * No cadastro de Avaliador, o professor escolhe as turmas que ele poderá ver.
  * Intuitivo, seguindo a identidade Soft Dashboard.
  *
  * @returns {JSX.Element} Página de cadastro de grupos.
@@ -54,11 +50,9 @@ export default function Grupos() {
   const [turmaAtiva, setTurmaAtiva] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
-  const [erroPerfil, setErroPerfil] = useState('');
-  const [erroModal, setErroModal] = useState('');
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({ nome: '', integrante: '', perfilId: '' });
-  const [formPerfil, setFormPerfil] = useState(PERFIL_VAZIO);
+  const [formPerfil, setFormPerfil] = useState({ email: '', nome: '', senha: '', role: 'lider' });
 
   /**
    * Carrega turmas, perfis (líderes/vices) e os grupos de cada turma.
@@ -111,51 +105,32 @@ export default function Grupos() {
   /** Abre um modal de ação e reinicia o formulário. */
   function abrirModal(tipo, contexto = {}) {
     setForm({ nome: contexto.nome ?? '', integrante: '', perfilId: '' });
-    setErroModal('');
     setModal({ tipo, ...contexto });
   }
 
-  /** Abre o modal de cadastro de Líder/Vice-Líder/Avaliador. */
+  /** Abre o modal de cadastro de Líder/Vice-Líder. */
   function abrirPerfilModal() {
-    setFormPerfil(PERFIL_VAZIO);
-    setErroPerfil('');
+    setFormPerfil({ email: '', nome: '', senha: '', role: 'lider' });
     setModal({ tipo: 'perfil' });
   }
 
-  /** Marca ou desmarca uma turma do avaliador no formulário de cadastro. */
-  function alternarTurma(turmaId) {
-    setFormPerfil((atual) => ({
-      ...atual,
-      turmaIds: atual.turmaIds.includes(turmaId)
-        ? atual.turmaIds.filter((id) => id !== turmaId)
-        : [...atual.turmaIds, turmaId],
-    }));
-  }
-
   /**
-   * Cadastra um Líder, Vice-Líder ou Avaliador (gmail, nome, senha) pelo Professor.
-   * Para o Avaliador, envia também as turmas escolhidas (turma_ids).
+   * Cadastra um Líder ou Vice-Líder (gmail, nome, senha) pelo Professor.
    */
   async function cadastrarPerfil() {
-    setErroPerfil('');
-    try {
-      await api('/profiles', {
-        method: 'POST',
-        body: {
-          email: formPerfil.email,
-          nome: formPerfil.nome,
-          senha: formPerfil.senha,
-          role: formPerfil.role,
-          ...(formPerfil.role === 'avaliador' ? { turma_ids: formPerfil.turmaIds } : {}),
-        },
-        token,
-      });
-      setModal(null);
-      const { perfis } = await api('/profiles', { token });
-      setPerfis(perfis);
-    } catch (e) {
-      setErroPerfil(e.message || 'Nao foi possivel cadastrar o perfil.');
-    }
+    await api('/profiles', {
+      method: 'POST',
+      body: {
+        email: formPerfil.email,
+        nome: formPerfil.nome,
+        senha: formPerfil.senha,
+        role: formPerfil.role,
+      },
+      token,
+    });
+    setModal(null);
+    const { perfis } = await api('/profiles', { token });
+    setPerfis(perfis);
   }
 
   function sair() {
@@ -193,26 +168,23 @@ export default function Grupos() {
     await recarregar(turmaId);
   }
 
-  /**
-   * Define (ou troca) o Líder ou o Vice-Líder de um grupo já criado.
-   * Se o servidor recusar, o motivo aparece dentro da janela.
-   *
-   * @param {'lider'|'vice-lider'} rota Cargo que será definido.
-   */
-  async function designarPapel(rota) {
-    setErroModal('');
-    try {
-      await api(`/grupos/${modal.grupoId}/${rota}`, { method: 'PUT', body: { perfil_id: form.perfilId }, token });
-      const turmaId = modal.turmaId;
-      setModal(null);
-      await recarregar(turmaId);
-    } catch (e) {
-      setErroModal(e.message || 'Nao foi possivel alterar o cargo.');
-    }
+  async function designarLider() {
+    await api(`/grupos/${modal.grupoId}/lider`, { method: 'PUT', body: { perfil_id: form.perfilId }, token });
+    const turmaId = modal.turmaId;
+    setModal(null);
+    await recarregar(turmaId);
   }
 
-  const designarLider = () => designarPapel('lider');
-  const designarVice = () => designarPapel('vice-lider');
+  async function designarVice() {
+    await api(`/grupos/${modal.grupoId}/vice-lider`, {
+      method: 'PUT',
+      body: { perfil_id: form.perfilId },
+      token,
+    });
+    const turmaId = modal.turmaId;
+    setModal(null);
+    await recarregar(turmaId);
+  }
 
   if (carregando) {
     return (
@@ -222,25 +194,23 @@ export default function Grupos() {
     );
   }
 
-  const avaliadorSemTurma = formPerfil.role === 'avaliador' && formPerfil.turmaIds.length === 0;
-
   return (
     <div className="min-h-screen bg-canvas">
       <header className="sticky top-0 z-10 border-b border-border bg-surface/80 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
-              <ArrowLeft className="h-4 w-4" /> Voltar
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <Button variant="ghost" size="sm" aria-label="Voltar" onClick={() => navigate('/dashboard')}>
+              <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">Voltar</span>
             </Button>
-            <div className="leading-tight">
+            <div className="min-w-0 leading-tight">
               <h1 className="font-display text-lg font-bold text-text">Cadastro de Grupos</h1>
-              <p className="text-xs text-text-muted">Até 7 grupos por turma e 10 integrantes por grupo.</p>
+              <p className="truncate text-xs text-text-muted">Até 5 grupos por turma e 7 integrantes por grupo.</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <ThemeToggle />
-            <Button variant="outline" size="sm" onClick={sair}>
-              <LogOut className="h-4 w-4" /> Sair
+            <Button variant="outline" size="sm" aria-label="Sair" onClick={sair}>
+              <LogOut className="h-4 w-4" /> <span className="hidden sm:inline">Sair</span>
             </Button>
           </div>
         </div>
@@ -285,7 +255,9 @@ export default function Grupos() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={abrirPerfilModal}>
-              <UserPlus className="h-4 w-4" /> Cadastrar Líder / Vice / Avaliador
+              <UserPlus className="h-4 w-4" />
+              <span className="sm:hidden">Cadastrar conta</span>
+              <span className="hidden sm:inline">Cadastrar Líder / Vice / Avaliador</span>
             </Button>
             {/* Gera senha temporária para quem esqueceu a senha */}
             <ContasSenhas />
@@ -305,14 +277,14 @@ export default function Grupos() {
           </p>
         )}
 
-        {/* Grupos */}
+        {/* Grupos (grid-cols-1 limita a coluna à largura da tela no celular) */}
         {gruposAtuais.length === 0 ? (
           <Card className="p-8 text-center text-text-muted">
             <Users className="mx-auto mb-2 h-8 w-8" />
             Nenhum grupo ainda. Clique em "Novo grupo" para começar.
           </Card>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {gruposAtuais.map((grupo) => (
               <GrupoCard
                 key={grupo.id}
@@ -372,36 +344,26 @@ export default function Grupos() {
         </form>
       </Modal>
 
-      <Modal open={modal?.tipo === 'lider'} onClose={() => setModal(null)} title="Alterar Líder do grupo">
+      <Modal open={modal?.tipo === 'lider'} onClose={() => setModal(null)} title="Designar Líder">
         <EscolhaPerfil
           perfis={lideres}
           vazio="Nenhum perfil de Líder cadastrado ainda."
-          atualId={modal?.atualId}
           selecionado={form.perfilId}
           onSelecionar={(id) => setForm({ ...form, perfilId: id })}
         />
-        <p className="mt-3 text-xs font-medium text-warning">
-          Atenção: quem estava no cargo será removido do grupo, junto com as notas que recebeu como integrante.
-        </p>
-        {erroModal && <p className="mt-2 text-sm font-medium text-danger">{erroModal}</p>}
-        <Button className="mt-4 w-full" onClick={designarLider} disabled={!form.perfilId || form.perfilId === modal?.atualId}>
+        <Button className="mt-4 w-full" onClick={designarLider} disabled={!form.perfilId}>
           Salvar líder
         </Button>
       </Modal>
 
-      <Modal open={modal?.tipo === 'vice'} onClose={() => setModal(null)} title="Alterar Vice-Líder do grupo">
+      <Modal open={modal?.tipo === 'vice'} onClose={() => setModal(null)} title="Designar Vice-Líder">
         <EscolhaPerfil
           perfis={vices}
           vazio="Nenhum perfil de Vice-Líder cadastrado ainda."
-          atualId={modal?.atualId}
           selecionado={form.perfilId}
           onSelecionar={(id) => setForm({ ...form, perfilId: id })}
         />
-        <p className="mt-3 text-xs font-medium text-warning">
-          Atenção: quem estava no cargo será removido do grupo, junto com as notas que recebeu como integrante.
-        </p>
-        {erroModal && <p className="mt-2 text-sm font-medium text-danger">{erroModal}</p>}
-        <Button className="mt-4 w-full" onClick={designarVice} disabled={!form.perfilId || form.perfilId === modal?.atualId}>
+        <Button className="mt-4 w-full" onClick={designarVice} disabled={!form.perfilId}>
           Salvar vice-líder
         </Button>
       </Modal>
@@ -450,7 +412,7 @@ export default function Grupos() {
                   key={opcao.valor}
                   type="button"
                   onClick={() => setFormPerfil({ ...formPerfil, role: opcao.valor })}
-                  className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors ${
+                  className={`rounded-xl border px-2 py-2.5 text-sm font-semibold transition-colors sm:px-4 ${
                     formPerfil.role === opcao.valor
                       ? 'border-primary bg-primary-soft text-primary'
                       : 'border-border bg-surface text-text-muted hover:bg-surface-muted'
@@ -461,48 +423,10 @@ export default function Grupos() {
               ))}
             </div>
           </div>
-
-          {/* Turmas: só aparecem quando o papel escolhido é Avaliador */}
-          {formPerfil.role === 'avaliador' && (
-            <div>
-              <span className="mb-1.5 block text-sm font-semibold text-text">Turmas que ele vai avaliar</span>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {turmas.map((turma) => {
-                  const marcada = formPerfil.turmaIds.includes(turma.id);
-                  return (
-                    <label
-                      key={turma.id}
-                      className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
-                        marcada
-                          ? 'border-primary bg-primary-soft text-primary'
-                          : 'border-border bg-surface text-text-muted hover:bg-surface-muted'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={marcada}
-                        onChange={() => alternarTurma(turma.id)}
-                        className="h-4 w-4 accent-primary"
-                      />
-                      Turma {turma.nome}
-                    </label>
-                  );
-                })}
-              </div>
-              <p className="mt-1.5 text-xs text-text-muted">
-                O avaliador só verá os projetos das turmas marcadas. Marque pelo menos uma.
-              </p>
-            </div>
-          )}
-
-          {erroPerfil && <p className="text-sm font-medium text-danger">{erroPerfil}</p>}
-
           <Button
             type="submit"
             className="w-full"
-            disabled={
-              !formPerfil.email.trim() || !formPerfil.nome.trim() || !formPerfil.senha.trim() || avaliadorSemTurma
-            }
+            disabled={!formPerfil.email.trim() || !formPerfil.nome.trim() || !formPerfil.senha.trim()}
           >
             Cadastrar
           </Button>
@@ -514,6 +438,7 @@ export default function Grupos() {
 
 /**
  * Cartão de um grupo com integrantes e ações do professor.
+ * No celular o nome do aluno quebra de linha (no computador fica com "...").
  *
  * @param {Object} props Propriedades do cartão.
  * @param {Object} props.grupo Grupo a exibir.
@@ -525,19 +450,19 @@ export default function Grupos() {
  */
 function GrupoCard({ grupo, turmaId, onAbrir, onRemoverIntegrante, onDetalhe }) {
   return (
-    <Card className="p-4">
+    <Card className="min-w-0 p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="font-display text-lg font-bold text-text">{grupo.nome}</h3>
+          <h3 className="break-words font-display text-lg font-bold text-text">{grupo.nome}</h3>
           <Badge tone="aluno">
             {grupo.integrantes.length}/{LIMITE_INTEGRANTES} integrantes
           </Badge>
         </div>
-        <div className="flex gap-1">
-          <Button variant="ghost" size="sm" onClick={() => onAbrir('renomear', { grupoId: grupo.id, turmaId, nome: grupo.nome })}>
+        <div className="flex shrink-0 gap-1">
+          <Button variant="ghost" size="sm" aria-label="Renomear grupo" onClick={() => onAbrir('renomear', { grupoId: grupo.id, turmaId, nome: grupo.nome })}>
             <Pencil className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => onAbrir('excluir', { grupoId: grupo.id, turmaId, nome: grupo.nome })}>
+          <Button variant="ghost" size="sm" aria-label="Excluir grupo" onClick={() => onAbrir('excluir', { grupoId: grupo.id, turmaId, nome: grupo.nome })}>
             <Trash2 className="h-4 w-4 text-danger" />
           </Button>
         </div>
@@ -555,16 +480,20 @@ function GrupoCard({ grupo, turmaId, onAbrir, onRemoverIntegrante, onDetalhe }) 
           return (
             <li
               key={integrante.id}
-              className="flex items-center gap-2 rounded-lg border border-border bg-surface-muted px-2 py-1.5"
+              className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-surface-muted px-2 py-1.5"
             >
-              <Avatar name={integrante.nome_aluno} className="h-7 w-7 text-xs" />
-              <span className="flex-1 truncate text-sm font-medium text-text">{integrante.nome_aluno}</span>
-              <Badge tone={papel}>{papel === 'lider' ? 'Líder' : papel === 'vice' ? 'Vice' : 'Aluno'}</Badge>
+              <Avatar name={integrante.nome_aluno} className="h-7 w-7 shrink-0 text-xs" />
+              <span className="min-w-0 flex-1 break-words text-sm font-medium text-text sm:truncate">
+                {integrante.nome_aluno}
+              </span>
+              <span className="shrink-0">
+                <Badge tone={papel}>{papel === 'lider' ? 'Líder' : papel === 'vice' ? 'Vice' : 'Aluno'}</Badge>
+              </span>
               <button
                 type="button"
                 aria-label={`Remover ${integrante.nome_aluno}`}
                 onClick={() => onRemoverIntegrante(grupo.id, turmaId, integrante.id)}
-                className="text-text-muted transition-colors hover:text-danger"
+                className="shrink-0 text-text-muted transition-colors hover:text-danger"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -574,11 +503,11 @@ function GrupoCard({ grupo, turmaId, onAbrir, onRemoverIntegrante, onDetalhe }) 
       </ul>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button size="sm" variant="secondary" onClick={() => onAbrir('lider', { grupoId: grupo.id, turmaId, atualId: grupo.lider_id })}>
-          <Crown className="h-4 w-4" /> Alterar líder
+        <Button size="sm" variant="secondary" onClick={() => onAbrir('lider', { grupoId: grupo.id, turmaId })}>
+          <Crown className="h-4 w-4" /> Líder
         </Button>
-        <Button size="sm" variant="outline" onClick={() => onAbrir('vice', { grupoId: grupo.id, turmaId, atualId: grupo.vice_lider_id })}>
-          <Shield className="h-4 w-4" /> Alterar vice
+        <Button size="sm" variant="outline" onClick={() => onAbrir('vice', { grupoId: grupo.id, turmaId })}>
+          <Shield className="h-4 w-4" /> Vice
         </Button>
         <Button
           size="sm"
@@ -601,70 +530,39 @@ function GrupoCard({ grupo, turmaId, onAbrir, onRemoverIntegrante, onDetalhe }) 
 }
 
 /**
- * Lista de perfis (Líder ou Vice-Líder) para escolher quem assume o cargo.
- * Tem campo de busca por nome ou e-mail e altura limitada com rolagem própria,
- * para a janela não passar do tamanho da tela quando há muitos perfis.
- * O perfil que ocupa o cargo hoje aparece marcado como "Atual".
+ * Lista clicável de perfis (Líder/Vice-Líder) para designação.
  *
  * @param {Object} props Propriedades da escolha.
  * @param {Array<Object>} props.perfis Perfis disponíveis.
  * @param {string} props.vazio Mensagem quando não há perfis.
- * @param {string} [props.atualId] UUID de quem ocupa o cargo agora.
  * @param {string} props.selecionado UUID selecionado.
  * @param {Function} props.onSelecionar Callback de seleção.
- * @returns {JSX.Element} Lista de escolha com busca e rolagem.
+ * @returns {JSX.Element} Lista de escolha.
  */
-function EscolhaPerfil({ perfis, vazio, atualId, selecionado, onSelecionar }) {
-  const [busca, setBusca] = useState('');
-
+function EscolhaPerfil({ perfis, vazio, selecionado, onSelecionar }) {
   if (perfis.length === 0) {
     return <p className="text-text-muted">{vazio}</p>;
   }
-
-  const termo = busca.trim().toLowerCase();
-  const filtrados = termo
-    ? perfis.filter((perfil) => `${perfil.nome} ${perfil.email}`.toLowerCase().includes(termo))
-    : perfis;
-
   return (
-    <div>
-      <input
-        type="search"
-        value={busca}
-        onChange={(e) => setBusca(e.target.value)}
-        placeholder="Buscar por nome ou e-mail"
-        className="h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm text-text placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
-      />
-
-      <div className="mt-3 max-h-[40vh] space-y-2 overflow-y-auto pr-1">
-        {filtrados.length === 0 ? (
-          <p className="py-4 text-center text-sm text-text-muted">Nenhum perfil encontrado.</p>
-        ) : (
-          filtrados.map((perfil) => (
-            <button
-              key={perfil.id}
-              type="button"
-              onClick={() => onSelecionar(perfil.id)}
-              className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
-                selecionado === perfil.id
-                  ? 'border-primary bg-primary-soft'
-                  : 'border-border bg-surface hover:bg-surface-muted'
-              }`}
-            >
-              <Avatar name={perfil.nome} className="h-8 w-8 shrink-0 text-xs" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-text">{perfil.nome}</p>
-                <p className="truncate text-xs text-text-muted">{perfil.email}</p>
-              </div>
-              {perfil.id === atualId && (
-                <span className="shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-xs font-bold text-primary">
-                  Atual
-                </span>
-              )}
-            </button>
-          ))
-        )}
-      </div>
+    <div className="space-y-2">
+      {perfis.map((perfil) => (
+        <button
+          key={perfil.id}
+          type="button"
+          onClick={() => onSelecionar(perfil.id)}
+          className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
+            selecionado === perfil.id
+              ? 'border-primary bg-primary-soft'
+              : 'border-border bg-surface hover:bg-surface-muted'
+          }`}
+        >
+          <Avatar name={perfil.nome} className="h-8 w-8 shrink-0 text-xs" />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-text">{perfil.nome}</p>
+            <p className="truncate text-xs text-text-muted">{perfil.email}</p>
+          </div>
+        </button>
+      ))}
     </div>
   );
 }
