@@ -66,3 +66,13 @@ export const minhasTurmas = asyncHandler(async (req, res) => {
   const turmas = await avaliadorService.turmasDoAvaliador(req.user.id);
   res.json({ turmas });
 });
+
+/**
+ * DELETE /api/profiles/avaliadores/:id — Exclui um avaliador (exclusivo do
+ * Professor). Remove a conta de acesso, o perfil e os vínculos com turmas.
+ */
+export const excluirAvaliador = asyncHandler(async (req, res) => {
+  const { id } = perfilIdParamSchema.parse(req.params);
+  const resultado = await avaliadorService.excluirAvaliador({ avaliadorId: id }, req.user.id);
+  res.json(resultado);
+});

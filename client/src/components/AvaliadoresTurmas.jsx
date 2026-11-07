@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Pencil } from 'lucide-react';
+import { Loader2, Pencil, Trash2 } from 'lucide-react';
 import Button from './ui/Button.jsx';
 import Card from './ui/Card.jsx';
 import Badge from './ui/Badge.jsx';
@@ -31,6 +31,9 @@ export default function AvaliadoresTurmas({ turmas }) {
   const [escolhidas, setEscolhidas] = useState([]);
   const [salvando, setSalvando] = useState(false);
   const [erroModal, setErroModal] = useState('');
+  const [excluir, setExcluir] = useState(null);
+  const [excluindo, setExcluindo] = useState(false);
+  const [erroExcluir, setErroExcluir] = useState('');
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -70,6 +73,29 @@ export default function AvaliadoresTurmas({ turmas }) {
     const depois = [...escolhidas].sort().join(',');
     return antes === depois;
   }, [alvo, escolhidas]);
+
+  /** Fecha a janela de turmas e abre a confirmação de exclusão do avaliador. */
+  function abrirExclusao() {
+    setErroExcluir('');
+    setExcluir(alvo);
+    setAlvo(null);
+  }
+
+  /** Exclui o avaliador (conta, perfil e vínculos) depois da confirmação. */
+  async function confirmarExclusao() {
+    setExcluindo(true);
+    setErroExcluir('');
+    try {
+      await api(`/profiles/avaliadores/${excluir.id}`, { method: 'DELETE', token });
+      setAvaliadores((lista) => lista.filter((a) => a.id !== excluir.id));
+      setAviso(`Avaliador ${excluir.nome} excluído.`);
+      setExcluir(null);
+    } catch (e) {
+      setErroExcluir(e.message || 'Nao foi possivel excluir o avaliador.');
+    } finally {
+      setExcluindo(false);
+    }
+  }
 
   /** Salva as turmas escolhidas para o avaliador. */
   async function salvar() {
@@ -199,6 +225,41 @@ export default function AvaliadoresTurmas({ turmas }) {
             >
               {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {salvando ? 'Salvando...' : 'Salvar turmas'}
+            </Button>
+          </div>
+
+          <div className="border-t border-border pt-3">
+            <Button variant="ghost" className="w-full text-danger" onClick={abrirExclusao}>
+              <Trash2 className="h-4 w-4" /> Excluir avaliador
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={Boolean(excluir)} onClose={() => setExcluir(null)} title="Excluir avaliador">
+        <div className="space-y-4">
+          <p className="text-text-muted">
+            Excluir <strong className="text-text">{excluir?.nome}</strong> ({excluir?.email})? A conta dele será
+            removida e ele não conseguirá mais entrar no sistema. Essa ação não pode ser desfeita.
+          </p>
+
+          {excluir?.total_avaliacoes > 0 && (
+            <p className="rounded-lg border border-warning-soft bg-warning-soft px-3 py-2 text-sm font-medium text-warning">
+              {excluir.total_avaliacoes === 1
+                ? 'A 1 avaliação de banca que ele registrou também será apagada.'
+                : `As ${excluir.total_avaliacoes} avaliações de banca que ele registrou também serão apagadas.`}
+            </p>
+          )}
+
+          {erroExcluir && <p className="text-sm font-medium text-danger">{erroExcluir}</p>}
+
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => setExcluir(null)}>
+              Cancelar
+            </Button>
+            <Button variant="danger" className="flex-1" onClick={confirmarExclusao} disabled={excluindo}>
+              {excluindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {excluindo ? 'Excluindo...' : 'Excluir'}
             </Button>
           </div>
         </div>

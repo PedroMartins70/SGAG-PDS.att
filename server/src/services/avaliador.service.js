@@ -53,7 +53,10 @@ export async function vincularTurmas(avaliadorId, turmaIds) {
  * Lista todos os avaliadores ativos com as turmas em que cada um avalia
  * (quadro "Avaliadores e turmas" do painel do professor).
  *
- * @returns {Promise<Array<{id: string, nome: string, email: string, turmas: Array<{id: string, nome: string}>}>>}
+ * Cada avaliador traz também total_avaliacoes (quantas avaliações de banca ele já
+ * registrou), usado no aviso antes de excluí-lo.
+ *
+ * @returns {Promise<Array<{id: string, nome: string, email: string, total_avaliacoes: number, turmas: Array<{id: string, nome: string}>}>>}
  */
 export async function listarAvaliadoresComTurmas() {
   const { data: avaliadores, error } = await supabaseAdmin
@@ -70,15 +73,15 @@ export async function listarAvaliadoresComTurmas() {
   const lista = avaliadores ?? [];
   if (lista.length === 0) return [];
 
-  const [vinculos, turmas] = await Promise.all([
-    supabaseAdmin
-      .from('avaliador_turmas')
-      .select('avaliador_id, turma_id')
-      .in('avaliador_id', lista.map((a) => a.id)),
+  const ids = lista.map((a) => a.id);
+
+  const [vinculos, turmas, banca] = await Promise.all([
+    supabaseAdmin.from('avaliador_turmas').select('avaliador_id, turma_id').in('avaliador_id', ids),
     supabaseAdmin.from('turmas').select('id, nome').order('nome'),
+    supabaseAdmin.from('avaliacoes_banca').select('avaliador_id').in('avaliador_id', ids),
   ]);
 
-  if (vinculos.error || turmas.error) {
+  if (vinculos.error || turmas.error || banca.error) {
     throw new AppError(500, 'Falha ao listar as turmas dos avaliadores');
   }
 
@@ -88,6 +91,7 @@ export async function listarAvaliadoresComTurmas() {
     id: avaliador.id,
     nome: avaliador.nome,
     email: avaliador.email,
+    total_avaliacoes: (banca.data ?? []).filter((b) => b.avaliador_id === avaliador.id).length,
     turmas: (vinculos.data ?? [])
       .filter((v) => v.avaliador_id === avaliador.id)
       .map((v) => turmasPorId[v.turma_id])
@@ -238,4 +242,56 @@ export async function garantirAvaliadorNoGrupo(usuario, grupoId) {
   }
 
   await garantirAvaliadorNaTurma(usuario, grupo.turma_id);
+}
+
+/**
+ * Exclui um avaliador (exclusivo do Professor): remove a conta de acesso e o
+ * perfil. Os vínculos com turmas saem junto. As avaliações de banca que ele já
+ * registrou são apagadas junto com o perfil (o histórico de auditoria é mantido,
+ * sem o nome dele). Só funciona para perfis com o papel 'avaliador'.
+ *
+ * @param {Object} dados Dados da exclusão.
+ * @param {string} dados.avaliadorId UUID do avaliador.
+ * @param {string} professorId UUID do professor executor.
+ * @returns {Promise<{success: boolean, id: string, nome: string}>} Resultado.
+ * @throws {AppError} 404 se não existir; 400 se não for avaliador ou se o banco impedir a exclusão.
+ */
+export async function excluirAvaliador({ avaliadorId }, professorId) {
+  const { data: perfil, error: perfilError } = await supabaseAdmin
+    .from('profiles')
+    .select('id, nome, email, role')
+    .eq('id', avaliadorId)
+    .maybeSingle();
+
+  if (perfilError || !perfil) {
+    throw new AppError(404, 'Avaliador nao encontrado');
+  }
+
+  if (perfil.role !== 'avaliador') {
+    throw new AppError(400, 'So e possivel excluir perfis de avaliador por aqui');
+  }
+
+  const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(avaliadorId);
+
+  if (authError) {
+    console.error('Falha ao excluir o avaliador', avaliadorId, authError.message);
+    throw new AppError(
+      400,
+      'Nao foi possivel excluir o avaliador. Verifique se ha registros ligados a ele e tente novamente.'
+    );
+  }
+
+  // O perfil sai junto com a conta (ON DELETE CASCADE); isto garante que nao sobra linha solta.
+  const { error: limparError } = await supabaseAdmin.from('profiles').delete().eq('id', avaliadorId);
+  if (limparError) {
+    console.error('Falha ao limpar o perfil do avaliador excluido', avaliadorId, limparError.message);
+  }
+
+  await registrarAuditoria('profiles', avaliadorId, 'DELETE', professorId, {
+    tipo: 'excluir_avaliador',
+    nome: perfil.nome,
+    email: perfil.email,
+  });
+
+  return { success: true, id: perfil.id, nome: perfil.nome };
 }

@@ -201,12 +201,17 @@ describe('Integracao completa da API /api (TDD)', () => {
       error: null,
     });
     supabase.queue('turmas', { data: [{ id: TURMA_3A_UUID, nome: '3A' }], error: null });
+    supabase.queue('avaliacoes_banca', {
+      data: [{ avaliador_id: 'aval-1' }, { avaliador_id: 'aval-1' }],
+      error: null,
+    });
 
     const res = await request(app).get('/api/profiles/avaliadores').set('Authorization', token);
 
     expect(res.status).toBe(200);
     expect(res.body.avaliadores).toHaveLength(1);
     expect(res.body.avaliadores[0].turmas[0].nome).toBe('3A');
+    expect(res.body.avaliadores[0].total_avaliacoes).toBe(2);
   });
 
   it('GET /api/profiles/avaliadores e bloqueado para nao-professor (HTTP 403)', async () => {
@@ -266,6 +271,54 @@ describe('Integracao completa da API /api (TDD)', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.turmas).toEqual([{ id: TURMA_3A_UUID, nome: '3A' }]);
+  });
+
+  it('DELETE /api/profiles/avaliadores/:id exclui o avaliador (professor)', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_PROFESSOR);
+    supabase.auth.admin.deleteUser = vi.fn().mockResolvedValue({ data: null, error: null });
+    supabase.queue('profiles', {
+      data: { id: AVALIADOR_UUID, nome: 'Prof Banca', email: 'banca@escola.com', role: 'avaliador' },
+      error: null,
+    });
+    supabase.queue('profiles', { data: null, error: null });
+    supabase.queue('audit_logs', { data: null, error: null });
+
+    const res = await request(app)
+      .delete(`/api/profiles/avaliadores/${AVALIADOR_UUID}`)
+      .set('Authorization', token);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(supabase.auth.admin.deleteUser).toHaveBeenCalledWith(AVALIADOR_UUID);
+  });
+
+  it('DELETE /api/profiles/avaliadores/:id e bloqueado para nao-professor (HTTP 403)', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_AVALIADOR);
+
+    const res = await request(app)
+      .delete(`/api/profiles/avaliadores/${AVALIADOR_UUID}`)
+      .set('Authorization', token);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('DELETE /api/profiles/avaliadores/:id recusa perfil que nao e avaliador (HTTP 400)', async () => {
+    const supabase = holder.supabase;
+    const token = autenticarComo(supabase, PERFIL_PROFESSOR);
+    supabase.auth.admin.deleteUser = vi.fn();
+    supabase.queue('profiles', {
+      data: { id: AVALIADOR_UUID, nome: 'Ana Lider', email: 'lider@escola.com', role: 'lider' },
+      error: null,
+    });
+
+    const res = await request(app)
+      .delete(`/api/profiles/avaliadores/${AVALIADOR_UUID}`)
+      .set('Authorization', token);
+
+    expect(res.status).toBe(400);
+    expect(supabase.auth.admin.deleteUser).not.toHaveBeenCalled();
   });
 
   it('GET /api/turmas lista as turmas', async () => {
