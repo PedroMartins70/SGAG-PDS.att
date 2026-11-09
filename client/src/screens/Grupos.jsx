@@ -8,6 +8,7 @@ import {
   Mail,
   Pencil,
   Plus,
+  Search,
   Shield,
   Trash2,
   User,
@@ -56,6 +57,7 @@ export default function Grupos() {
 
   /**
    * Carrega turmas, perfis (líderes/vices) e os grupos de cada turma.
+   * Os grupos de todas as turmas são pedidos ao mesmo tempo.
    */
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -69,11 +71,11 @@ export default function Grupos() {
       setPerfis(perfis);
       if (turmas.length > 0) setTurmaAtiva((atual) => atual || turmas[0].id);
 
+      const listas = await Promise.all(turmas.map((turma) => api(`/turmas/${turma.id}/grupos`, { token })));
       const mapa = {};
-      for (const turma of turmas) {
-        const { grupos } = await api(`/turmas/${turma.id}/grupos`, { token });
-        mapa[turma.id] = grupos;
-      }
+      turmas.forEach((turma, indice) => {
+        mapa[turma.id] = listas[indice].grupos;
+      });
       setGruposPorTurma(mapa);
     } catch (e) {
       setErro(e.message || 'Falha ao carregar os grupos.');
@@ -532,6 +534,10 @@ function GrupoCard({ grupo, turmaId, onAbrir, onRemoverIntegrante, onDetalhe }) 
 /**
  * Lista clicável de perfis (Líder/Vice-Líder) para designação.
  *
+ * Tem uma caixa de busca (por nome ou e-mail) e a lista tem altura limitada,
+ * rolando dentro da própria janela. Assim o botão de salvar, logo abaixo,
+ * fica sempre visível, em qualquer tamanho de tela.
+ *
  * @param {Object} props Propriedades da escolha.
  * @param {Array<Object>} props.perfis Perfis disponíveis.
  * @param {string} props.vazio Mensagem quando não há perfis.
@@ -540,29 +546,62 @@ function GrupoCard({ grupo, turmaId, onAbrir, onRemoverIntegrante, onDetalhe }) 
  * @returns {JSX.Element} Lista de escolha.
  */
 function EscolhaPerfil({ perfis, vazio, selecionado, onSelecionar }) {
+  const [busca, setBusca] = useState('');
+
+  const filtrados = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    if (!termo) return perfis;
+    return perfis.filter((p) => `${p.nome} ${p.email}`.toLowerCase().includes(termo));
+  }, [perfis, busca]);
+
   if (perfis.length === 0) {
     return <p className="text-text-muted">{vazio}</p>;
   }
+
   return (
-    <div className="space-y-2">
-      {perfis.map((perfil) => (
-        <button
-          key={perfil.id}
-          type="button"
-          onClick={() => onSelecionar(perfil.id)}
-          className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
-            selecionado === perfil.id
-              ? 'border-primary bg-primary-soft'
-              : 'border-border bg-surface hover:bg-surface-muted'
-          }`}
-        >
-          <Avatar name={perfil.nome} className="h-8 w-8 shrink-0 text-xs" />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-text">{perfil.nome}</p>
-            <p className="truncate text-xs text-text-muted">{perfil.email}</p>
-          </div>
-        </button>
-      ))}
+    <div className="space-y-3">
+      {/* Busca */}
+      <div className="space-y-1">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+          <input
+            type="search"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome ou e-mail"
+            className="h-11 w-full rounded-xl border border-border bg-surface pl-9 pr-3 text-base text-text placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
+          />
+        </div>
+        <p className="text-xs text-text-muted">
+          {filtrados.length} de {perfis.length} contas
+        </p>
+      </div>
+
+      {/* Lista com rolagem própria */}
+      <div className="max-h-[45vh] space-y-2 overflow-y-auto pr-1">
+        {filtrados.length === 0 ? (
+          <p className="py-4 text-center text-sm text-text-muted">Nenhuma conta encontrada.</p>
+        ) : (
+          filtrados.map((perfil) => (
+            <button
+              key={perfil.id}
+              type="button"
+              onClick={() => onSelecionar(perfil.id)}
+              className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
+                selecionado === perfil.id
+                  ? 'border-primary bg-primary-soft'
+                  : 'border-border bg-surface hover:bg-surface-muted'
+              }`}
+            >
+              <Avatar name={perfil.nome} className="h-8 w-8 shrink-0 text-xs" />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-text">{perfil.nome}</p>
+                <p className="truncate text-xs text-text-muted">{perfil.email}</p>
+              </div>
+            </button>
+          ))
+        )}
+      </div>
     </div>
   );
 }
