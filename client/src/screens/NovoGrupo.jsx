@@ -11,9 +11,9 @@ import { useAuth } from '../auth/AuthContext.jsx';
 
 /**
  * Limite de alunos que podem ser cadastrados junto com o grupo.
- * O grupo tem no máximo 7 integrantes e o líder e o vice já contam entre eles.
+ * O grupo tem no máximo 10 integrantes e o líder e o vice já contam entre eles.
  */
-const LIMITE_INTEGRANTES = 5;
+const LIMITE_INTEGRANTES = 8;
 
 /**
  * Página "Novo Grupo": cadastro de um grupo com nome, Líder e Vice-Líder.
@@ -203,7 +203,7 @@ export default function NovoGrupo() {
                 <p className="mb-3 text-sm text-text-muted">
                   Não é obrigatório. O Líder e o Vice-Líder poderão adicionar os demais alunos depois, pela tela
                   deles. Se quiser, você já pode cadastrar até {LIMITE_INTEGRANTES} alunos aqui (o Líder e o Vice
-                  contam entre os 7 do grupo).
+                  contam entre os 10 do grupo).
                 </p>
 
                 {integrantes.length === 0 && (
