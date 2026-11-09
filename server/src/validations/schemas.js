@@ -100,6 +100,13 @@ export const definirTurmasSchema = z.object({
 });
 
 /**
+ * Schema de edição do nome de um avaliador (exclusivo do Professor).
+ */
+export const renomearAvaliadorSchema = z.object({
+  nome: z.string().trim().min(3, 'O nome deve ter no minimo 3 caracteres').max(255),
+});
+
+/**
  * Schema de listagem de perfis (filtro opcional por papel).
  */
 export const listarPerfisSchema = z.object({

@@ -27,15 +27,16 @@ import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import ContasSenhas from '../components/ContasSenhas.jsx';
 
-/** Limites de negócio. */
+/** Limites de negócio (iguais aos do servidor: grupo.service.js). */
 const LIMITE_GRUPOS = 7;
 const LIMITE_INTEGRANTES = 10;
 
 /**
  * Página de cadastro de grupos (visão do Professor).
  * Permite criar até 7 grupos por turma, adicionar até 10 integrantes por grupo
- * e designar Líder e Vice-Líder. Também tem o botão "Contas e senhas", para o
- * professor gerar uma senha temporária para quem esqueceu a senha.
+ * e designar Líder e Vice-Líder. Também cadastra Líder, Vice-Líder e Avaliador
+ * (o avaliador é vinculado às turmas que vai avaliar) e tem o botão
+ * "Contas e senhas", para gerar uma senha temporária para quem esqueceu a senha.
  * Intuitivo, seguindo a identidade Soft Dashboard.
  *
  * @returns {JSX.Element} Página de cadastro de grupos.
@@ -53,7 +54,8 @@ export default function Grupos() {
   const [erro, setErro] = useState('');
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({ nome: '', integrante: '', perfilId: '' });
-  const [formPerfil, setFormPerfil] = useState({ email: '', nome: '', senha: '', role: 'lider' });
+  const [formPerfil, setFormPerfil] = useState({ email: '', nome: '', senha: '', role: 'lider', turma_ids: [] });
+  const [erroPerfil, setErroPerfil] = useState('');
 
   /**
    * Carrega turmas, perfis (líderes/vices) e os grupos de cada turma.
@@ -110,29 +112,45 @@ export default function Grupos() {
     setModal({ tipo, ...contexto });
   }
 
-  /** Abre o modal de cadastro de Líder/Vice-Líder. */
+  /** Abre o modal de cadastro de Líder/Vice-Líder/Avaliador. */
   function abrirPerfilModal() {
-    setFormPerfil({ email: '', nome: '', senha: '', role: 'lider' });
+    setFormPerfil({ email: '', nome: '', senha: '', role: 'lider', turma_ids: [] });
+    setErroPerfil('');
     setModal({ tipo: 'perfil' });
   }
 
+  /** Marca ou desmarca uma turma na lista do avaliador. */
+  function alternarTurmaPerfil(turmaId) {
+    setFormPerfil((atual) => ({
+      ...atual,
+      turma_ids: atual.turma_ids.includes(turmaId)
+        ? atual.turma_ids.filter((id) => id !== turmaId)
+        : [...atual.turma_ids, turmaId],
+    }));
+  }
+
   /**
-   * Cadastra um Líder ou Vice-Líder (gmail, nome, senha) pelo Professor.
+   * Cadastra um Líder, Vice-Líder ou Avaliador (gmail, nome, senha) pelo Professor.
+   * Para o avaliador, envia também as turmas que ele vai avaliar.
    */
   async function cadastrarPerfil() {
-    await api('/profiles', {
-      method: 'POST',
-      body: {
+    setErroPerfil('');
+    try {
+      const body = {
         email: formPerfil.email,
         nome: formPerfil.nome,
         senha: formPerfil.senha,
         role: formPerfil.role,
-      },
-      token,
-    });
-    setModal(null);
-    const { perfis } = await api('/profiles', { token });
-    setPerfis(perfis);
+      };
+      if (formPerfil.role === 'avaliador') body.turma_ids = formPerfil.turma_ids;
+
+      await api('/profiles', { method: 'POST', body, token });
+      setModal(null);
+      const { perfis } = await api('/profiles', { token });
+      setPerfis(perfis);
+    } catch (e) {
+      setErroPerfil(e.message || 'Não foi possível cadastrar a conta.');
+    }
   }
 
   function sair() {
@@ -206,7 +224,9 @@ export default function Grupos() {
             </Button>
             <div className="min-w-0 leading-tight">
               <h1 className="font-display text-lg font-bold text-text">Cadastro de Grupos</h1>
-              <p className="truncate text-xs text-text-muted">Até 7 grupos por turma e 10 integrantes por grupo.</p>
+              <p className="text-xs text-text-muted">
+                Até {LIMITE_GRUPOS} grupos por turma e {LIMITE_INTEGRANTES} integrantes por grupo.
+              </p>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -378,6 +398,11 @@ export default function Grupos() {
           }}
           className="space-y-4"
         >
+          {erroPerfil && (
+            <div className="rounded-lg border border-danger-soft bg-danger-soft px-3 py-2 text-sm font-medium text-danger">
+              {erroPerfil}
+            </div>
+          )}
           <Input
             label="Gmail"
             type="email"
@@ -425,10 +450,49 @@ export default function Grupos() {
               ))}
             </div>
           </div>
+
+          {/* Turmas que o avaliador vai avaliar (só aparece para o papel Avaliador) */}
+          {formPerfil.role === 'avaliador' && (
+            <div>
+              <span className="mb-1.5 block text-sm font-semibold text-text">Turmas que ele vai avaliar</span>
+              <div className="grid grid-cols-2 gap-2">
+                {turmas.map((turma) => {
+                  const marcada = formPerfil.turma_ids.includes(turma.id);
+                  return (
+                    <label
+                      key={turma.id}
+                      className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors ${
+                        marcada
+                          ? 'border-primary bg-primary-soft text-primary'
+                          : 'border-border bg-surface text-text-muted hover:bg-surface-muted'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={marcada}
+                        onChange={() => alternarTurmaPerfil(turma.id)}
+                        className="h-4 w-4 accent-primary"
+                      />
+                      Turma {turma.nome}
+                    </label>
+                  );
+                })}
+              </div>
+              {formPerfil.turma_ids.length === 0 && (
+                <p className="mt-1 text-xs text-warning">Marque pelo menos uma turma.</p>
+              )}
+            </div>
+          )}
+
           <Button
             type="submit"
             className="w-full"
-            disabled={!formPerfil.email.trim() || !formPerfil.nome.trim() || !formPerfil.senha.trim()}
+            disabled={
+              !formPerfil.email.trim() ||
+              !formPerfil.nome.trim() ||
+              !formPerfil.senha.trim() ||
+              (formPerfil.role === 'avaliador' && formPerfil.turma_ids.length === 0)
+            }
           >
             Cadastrar
           </Button>

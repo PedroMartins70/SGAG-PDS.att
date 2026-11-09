@@ -245,6 +245,56 @@ export async function garantirAvaliadorNoGrupo(usuario, grupoId) {
 }
 
 /**
+ * Edita o nome de um avaliador (exclusivo do Professor).
+ * Só funciona para perfis com o papel 'avaliador'.
+ *
+ * @param {Object} dados Dados da edição.
+ * @param {string} dados.avaliadorId UUID do avaliador.
+ * @param {string} dados.nome Novo nome (já validado).
+ * @param {string} professorId UUID do professor executor.
+ * @returns {Promise<{id: string, nome: string}>} Avaliador atualizado.
+ * @throws {AppError} 404 se não existir; 400 se não for avaliador ou o nome estiver vazio.
+ */
+export async function renomearAvaliador({ avaliadorId, nome }, professorId) {
+  const { data: perfil, error: perfilError } = await supabaseAdmin
+    .from('profiles')
+    .select('id, nome, role')
+    .eq('id', avaliadorId)
+    .maybeSingle();
+
+  if (perfilError || !perfil) {
+    throw new AppError(404, 'Avaliador nao encontrado');
+  }
+
+  if (perfil.role !== 'avaliador') {
+    throw new AppError(400, 'O perfil indicado nao e um avaliador');
+  }
+
+  const novoNome = String(nome ?? '').trim();
+  if (!novoNome) {
+    throw new AppError(400, 'O nome do avaliador e obrigatorio');
+  }
+
+  if (novoNome === perfil.nome) {
+    return { id: perfil.id, nome: perfil.nome };
+  }
+
+  const { error } = await supabaseAdmin.from('profiles').update({ nome: novoNome }).eq('id', avaliadorId);
+
+  if (error) {
+    throw new AppError(400, `Falha ao alterar o nome do avaliador: ${error.message}`);
+  }
+
+  await registrarAuditoria('profiles', avaliadorId, 'UPDATE', professorId, {
+    tipo: 'renomear_avaliador',
+    nome_antigo: perfil.nome,
+    nome_novo: novoNome,
+  });
+
+  return { id: perfil.id, nome: novoNome };
+}
+
+/**
  * Exclui um avaliador (exclusivo do Professor): remove a conta de acesso e o
  * perfil. Os vínculos com turmas saem junto. As avaliações de banca que ele já
  * registrou são apagadas junto com o perfil (o histórico de auditoria é mantido,

@@ -1,5 +1,10 @@
 import { asyncHandler } from '../middlewares/error.middleware.js';
-import { criarPerfilSchema, definirTurmasSchema, listarPerfisSchema } from '../validations/schemas.js';
+import {
+  criarPerfilSchema,
+  definirTurmasSchema,
+  listarPerfisSchema,
+  renomearAvaliadorSchema,
+} from '../validations/schemas.js';
 import { perfilIdParamSchema, trocarEmailSchema } from '../validations/senha.schemas.js';
 import * as profileService from '../services/profile.service.js';
 import * as avaliadorService from '../services/avaliador.service.js';
@@ -42,6 +47,17 @@ export const trocarEmail = asyncHandler(async (req, res) => {
 export const listarAvaliadores = asyncHandler(async (req, res) => {
   const avaliadores = await avaliadorService.listarAvaliadoresComTurmas();
   res.json({ avaliadores });
+});
+
+/**
+ * PUT /api/profiles/avaliadores/:id — Edita o nome de um avaliador
+ * (exclusivo do Professor).
+ */
+export const renomearAvaliador = asyncHandler(async (req, res) => {
+  const { id } = perfilIdParamSchema.parse(req.params);
+  const { nome } = renomearAvaliadorSchema.parse(req.body);
+  const avaliador = await avaliadorService.renomearAvaliador({ avaliadorId: id, nome }, req.user.id);
+  res.json({ avaliador });
 });
 
 /**
