@@ -17,6 +17,17 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           BASE="${SUPABASE_URL%/}"
-          curl --fail --silent --show-error --max-time 30 \
-            "$BASE/rest/v1/turmas?select=id&limit=1" \
-            -H "apikey: $SUPABASE_ANON_KEY"
+          STATUS=$(curl --silent --show-error --max-time 30 \
+            --output resposta.txt --write-out "%{http_code}" \
+            --request POST "$BASE/rest/v1/rpc/manter_ativo" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{}')
+          echo "Status HTTP: $STATUS"
+          echo "Resposta:"
+          cat resposta.txt
+          echo
+          if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 300 ]; then
+            echo "A consulta falhou."
+            exit 1
+          fi
