@@ -1,0 +1,22 @@
+name: Manter o Supabase ativo
+
+on:
+  schedule:
+    # Roda às 00:00 e às 12:00 (horário UTC), todos os dias
+    - cron: '0 */12 * * *'
+  # Permite rodar na mão, pelo botão "Run workflow"
+  workflow_dispatch:
+
+jobs:
+  consultar-banco:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fazer uma consulta simples no banco
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          BASE="${SUPABASE_URL%/}"
+          curl --fail --silent --show-error --max-time 30 \
+            "$BASE/rest/v1/turmas?select=id&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY"
