@@ -16,7 +16,9 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
+          # Limpa a URL: tira a barra final e um "/rest/v1" que tenha vindo junto
           BASE="${SUPABASE_URL%/}"
+          BASE="${BASE%/rest/v1}"
           STATUS=$(curl --silent --show-error --max-time 30 \
             --output resposta.txt --write-out "%{http_code}" \
             --request POST "$BASE/rest/v1/rpc/manter_ativo" \
