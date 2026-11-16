@@ -2,12 +2,12 @@
 @import "tailwindcss";
 
 /*
-  IDENTIDADE VISUAL — SOFT DASHBOARD
+ IDENTIDADE VISUAL — SOFT DASHBOARD
   Confortável, simples, intuitiva e lúdica.
   Linguagem acolhedora e de fácil leitura para adolescentes e idosos:
   cores suaves, alto contraste de texto, cantos arredondados,
   alvos de toque generosos e foco visível.
-*/
+*/ 
 
 @theme inline {
   --font-sans: 'Inter', 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;

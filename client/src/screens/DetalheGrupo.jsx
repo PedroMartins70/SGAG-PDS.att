@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Clock, Crown, Loader2, Pencil, Plus, Shield, Trash2, UserX } from 'lucide-react';
+import { ArrowLeft, Clock, Crown, Loader2, Lock, Pencil, Plus, Shield, Trash2, Unlock, UserX } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
 import Badge from '../components/ui/Badge.jsx';
@@ -29,8 +29,9 @@ const critVazio = () => Object.fromEntries(CRITERIOS.map((c) => [c.key, '']));
 
 /**
  * Página de detalhe do grupo (Professor): ver e editar avaliações por
- * bimestre, renomear o grupo, gerenciar integrantes, ver (somente leitura)
- * as avaliações da banca e os arquivos do projeto enviados pelo líder/vice.
+ * bimestre, renomear o grupo, gerenciar integrantes, liberar (ou retirar) a
+ * avaliação do vice-líder por bimestre, ver (somente leitura) as avaliações
+ * da banca e os arquivos do projeto enviados pelo líder/vice.
  * A edição de avaliação exige justificativa.
  *
  * @returns {JSX.Element} Página de detalhe do grupo.
@@ -47,6 +48,7 @@ export default function DetalheGrupo() {
   const [erro, setErro] = useState('');
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({ nome: '', integrante: '', justificativa: '', crit: critVazio() });
+  const [salvandoLiberacao, setSalvandoLiberacao] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -113,6 +115,24 @@ export default function DetalheGrupo() {
     await carregar();
   }
 
+  /** Libera ou retira a liberação da avaliação do vice-líder no bimestre selecionado. */
+  async function alternarLiberacaoVice() {
+    setSalvandoLiberacao(true);
+    setErro('');
+    try {
+      await api(`/grupos/${grupoId}/liberacao-vice`, {
+        method: 'PUT',
+        token,
+        body: { bimestre, liberado: !grupo.vice_liberado },
+      });
+      await carregar();
+    } catch (e) {
+      setErro(e.message || 'Falha ao alterar a liberação do vice-líder.');
+    } finally {
+      setSalvandoLiberacao(false);
+    }
+  }
+
   if (carregando && !grupo) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-canvas">
@@ -121,7 +141,7 @@ export default function DetalheGrupo() {
     );
   }
 
-  if (erro || !grupo) {
+  if (!grupo) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-canvas p-4">
         <UserX className="h-10 w-10 text-text-muted" />
@@ -219,6 +239,42 @@ export default function DetalheGrupo() {
             </p>
           </Card>
         </div>
+
+        {/* Liberação da avaliação para o Vice-Líder (por bimestre) */}
+        <Card className="mb-6 flex flex-wrap items-center justify-between gap-3 p-4">
+          <div className="min-w-0 flex-1">
+            <p className="flex items-center gap-2 font-semibold text-text">
+              {grupo.vice_liberado ? (
+                <Unlock className="h-4 w-4 text-success" />
+              ) : (
+                <Lock className="h-4 w-4 text-warning" />
+              )}
+              Avaliação do Vice-Líder no {bimestre}º bimestre
+            </p>
+            <p className="text-sm text-text-muted">
+              {!grupo.vice
+                ? 'Este grupo ainda não tem vice-líder definido.'
+                : grupo.vice_liberado
+                  ? 'Liberada: o vice-líder pode avaliar os integrantes.'
+                  : 'Bloqueada: o vice-líder está em modo somente leitura.'}
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant={grupo.vice_liberado ? 'outline' : 'success'}
+            onClick={alternarLiberacaoVice}
+            disabled={salvandoLiberacao || !grupo.vice}
+          >
+            {salvandoLiberacao ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : grupo.vice_liberado ? (
+              <Lock className="h-4 w-4" />
+            ) : (
+              <Unlock className="h-4 w-4" />
+            )}
+            {grupo.vice_liberado ? 'Retirar liberação' : 'Liberar para o vice'}
+          </Button>
+        </Card>
 
         {/* Integrantes */}
         <div className="mb-4 flex items-center justify-between gap-2">
