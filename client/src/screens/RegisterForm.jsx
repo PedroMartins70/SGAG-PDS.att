@@ -5,6 +5,7 @@ import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
 import Input from '../components/ui/Input.jsx';
 import ThemeToggle from '../components/ui/ThemeToggle.jsx';
+import { useToast } from '../components/ui/Toast.jsx';
 import { api } from '../services/api.js';
 
 /**
@@ -25,10 +26,14 @@ function LogoIcon({ className = '' }) {
  * Líderes e Vice-Líderes são cadastrados pelo Professor (POST /profiles).
  * Layout dividido: ilustração à esquerda, formulário à direita.
  *
+ * Ao cadastrar com sucesso, mostra um aviso de confirmação (que continua
+ * visível na tela de login) e leva o usuário ao login.
+ *
  * @returns {JSX.Element} Tela de cadastro do professor.
  */
 export default function RegisterForm() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
@@ -45,6 +50,7 @@ export default function RegisterForm() {
         method: 'POST',
         body: { nome, email, senha, confirmar_senha: confirmar, role: 'professor' },
       });
+      toast.sucesso('Conta criada com sucesso! Faça login para entrar.');
       navigate('/login', { state: { cadastrado: true } });
     } catch (e) {
       setErro(e.message || 'Nao foi possivel cadastrar');

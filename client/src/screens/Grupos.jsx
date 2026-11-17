@@ -23,6 +23,7 @@ import Avatar from '../components/ui/Avatar.jsx';
 import Modal from '../components/ui/Modal.jsx';
 import Input from '../components/ui/Input.jsx';
 import ThemeToggle from '../components/ui/ThemeToggle.jsx';
+import { useToast } from '../components/ui/Toast.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import ContasSenhas from '../components/ContasSenhas.jsx';
@@ -30,6 +31,13 @@ import ContasSenhas from '../components/ContasSenhas.jsx';
 /** Limites de negócio (iguais aos do servidor: grupo.service.js). */
 const LIMITE_GRUPOS = 7;
 const LIMITE_INTEGRANTES = 10;
+
+/** Nome de cada papel, usado na mensagem de confirmação do cadastro. */
+const ROTULOS_PERFIL = {
+  lider: 'Líder',
+  vice_lider: 'Vice-Líder',
+  avaliador: 'Avaliador',
+};
 
 /**
  * Página de cadastro de grupos (visão do Professor).
@@ -39,11 +47,14 @@ const LIMITE_INTEGRANTES = 10;
  * "Contas e senhas", para gerar uma senha temporária para quem esqueceu a senha.
  * Intuitivo, seguindo a identidade Soft Dashboard.
  *
+ * Ao cadastrar uma conta com sucesso, mostra um aviso de confirmação.
+ *
  * @returns {JSX.Element} Página de cadastro de grupos.
  */
 export default function Grupos() {
   const { session, logout } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
   const token = session?.token;
 
   const [turmas, setTurmas] = useState([]);
@@ -56,6 +67,7 @@ export default function Grupos() {
   const [form, setForm] = useState({ nome: '', integrante: '', perfilId: '' });
   const [formPerfil, setFormPerfil] = useState({ email: '', nome: '', senha: '', role: 'lider', turma_ids: [] });
   const [erroPerfil, setErroPerfil] = useState('');
+  const [cadastrandoPerfil, setCadastrandoPerfil] = useState(false);
 
   /**
    * Carrega turmas, perfis (líderes/vices) e os grupos de cada turma.
@@ -132,9 +144,13 @@ export default function Grupos() {
   /**
    * Cadastra um Líder, Vice-Líder ou Avaliador (gmail, nome, senha) pelo Professor.
    * Para o avaliador, envia também as turmas que ele vai avaliar.
+   *
+   * Se der certo, mostra um aviso de confirmação e fecha a janela. Se der erro,
+   * a janela continua aberta com a mensagem de erro.
    */
   async function cadastrarPerfil() {
     setErroPerfil('');
+    setCadastrandoPerfil(true);
     try {
       const body = {
         email: formPerfil.email,
@@ -145,12 +161,25 @@ export default function Grupos() {
       if (formPerfil.role === 'avaliador') body.turma_ids = formPerfil.turma_ids;
 
       await api('/profiles', { method: 'POST', body, token });
+
+      toast.sucesso(
+        `Conta de ${formPerfil.nome.trim()} cadastrada como ${ROTULOS_PERFIL[formPerfil.role] ?? 'perfil'}!`
+      );
       setModal(null);
-      const { perfis } = await api('/profiles', { token });
-      setPerfis(perfis);
     } catch (e) {
       setErroPerfil(e.message || 'Não foi possível cadastrar a conta.');
+      setCadastrandoPerfil(false);
+      return;
     }
+
+    // A conta já foi criada. Se só a atualização da lista falhar, não há o que avisar.
+    try {
+      const { perfis } = await api('/profiles', { token });
+      setPerfis(perfis);
+    } catch {
+      // a lista será atualizada na próxima vez que a página carregar
+    }
+    setCadastrandoPerfil(false);
   }
 
   function sair() {
@@ -488,13 +517,14 @@ export default function Grupos() {
             type="submit"
             className="w-full"
             disabled={
+              cadastrandoPerfil ||
               !formPerfil.email.trim() ||
               !formPerfil.nome.trim() ||
               !formPerfil.senha.trim() ||
               (formPerfil.role === 'avaliador' && formPerfil.turma_ids.length === 0)
             }
           >
-            Cadastrar
+            {cadastrandoPerfil ? 'Cadastrando...' : 'Cadastrar'}
           </Button>
         </form>
       </Modal>

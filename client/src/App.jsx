@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Clock } from 'lucide-react';
 import { ThemeProvider } from './theme/ThemeProvider.jsx';
 import { AuthProvider, useAuth } from './auth/AuthContext.jsx';
+import { ToastProvider } from './components/ui/Toast.jsx';
 import Login from './screens/Login.jsx';
 import RegisterForm from './screens/RegisterForm.jsx';
 import Dashboard from './screens/Dashboard.jsx';
@@ -94,7 +95,9 @@ function AvisoSessao() {
 }
 
 /**
- * Componente raiz: provedores de tema/autenticação e rotas da aplicação.
+ * Componente raiz: provedores de tema/autenticação/avisos e rotas da aplicação.
+ * O ToastProvider fica acima das rotas, então um aviso continua na tela mesmo
+ * depois de trocar de página ou fechar um modal.
  *
  * @returns {JSX.Element} Aplicação.
  */
@@ -102,62 +105,64 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <AvisoSessao />
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/cadastro" element={<Navigate to="/cadastro/professor" replace />} />
-          <Route path="/cadastro/professor" element={<RegisterForm />} />
-          <Route
-            path="/dashboard"
-            element={
-              <RequireAuth>
-                <Dashboard />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/grupos"
-            element={
-              <RequireProfessor>
-                <Grupos />
-              </RequireProfessor>
-            }
-          />
-          <Route
-            path="/grupos/novo/:turmaId"
-            element={
-              <RequireProfessor>
-                <NovoGrupo />
-              </RequireProfessor>
-            }
-          />
-          <Route
-            path="/grupos/:grupoId"
-            element={
-              <RequireProfessor>
-                <DetalheGrupo />
-              </RequireProfessor>
-            }
-          />
-          <Route
-            path="/grupos/:grupoId/historico"
-            element={
-              <RequireAuth>
-                <Historico />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/avaliador/grupos/:grupoId"
-            element={
-              <RequireAvaliador>
-                <AvaliadorGrupo />
-              </RequireAvaliador>
-            }
-          />
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
+        <ToastProvider>
+          <AvisoSessao />
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/cadastro" element={<Navigate to="/cadastro/professor" replace />} />
+            <Route path="/cadastro/professor" element={<RegisterForm />} />
+            <Route
+              path="/dashboard"
+              element={
+                <RequireAuth>
+                  <Dashboard />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/grupos"
+              element={
+                <RequireProfessor>
+                  <Grupos />
+                </RequireProfessor>
+              }
+            />
+            <Route
+              path="/grupos/novo/:turmaId"
+              element={
+                <RequireProfessor>
+                  <NovoGrupo />
+                </RequireProfessor>
+              }
+            />
+            <Route
+              path="/grupos/:grupoId"
+              element={
+                <RequireProfessor>
+                  <DetalheGrupo />
+                </RequireProfessor>
+              }
+            />
+            <Route
+              path="/grupos/:grupoId/historico"
+              element={
+                <RequireAuth>
+                  <Historico />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/avaliador/grupos/:grupoId"
+              element={
+                <RequireAvaliador>
+                  <AvaliadorGrupo />
+                </RequireAvaliador>
+              }
+            />
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </ToastProvider>
       </AuthProvider>
     </ThemeProvider>
   );
