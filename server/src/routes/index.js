@@ -8,6 +8,8 @@ import arquivoRoutes from './arquivo.routes.js';
 import dashboardRoutes from './dashboard.routes.js';
 import auditRoutes from './audit.routes.js';
 import avaliacaoBancaRoutes from './avaliacaoBanca.routes.js';
+import materiaisRoutes from './materiais.routes.js';
+import relatoriosRoutes from './relatorios.routes.js';
 
 const router = Router();
 
@@ -20,5 +22,7 @@ router.use(arquivoRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/audit-logs', auditRoutes);
 router.use(avaliacaoBancaRoutes);
+router.use(materiaisRoutes);
+router.use(relatoriosRoutes);   
 
 export default router;

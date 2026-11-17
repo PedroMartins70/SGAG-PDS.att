@@ -19,9 +19,13 @@ function formatarData(iso) {
  * Avaliação da banca de um grupo, por bimestre.
  * - Avaliador: preenche e salva a própria avaliação (4 blocos + comentário),
  *   mas SÓ dentro do período liberado pelo professor.
- * - Professor, Líder e Vice-Líder: veem as avaliações (somente leitura).
+ * - Professor: vê todas as avaliações (somente leitura), com o nome real de
+ *   cada avaliador e o nome genérico ao lado (ex.: "Maria (Avaliador 2)").
+ * - Líder e Vice-Líder: veem as avaliações (somente leitura), com os
+ *   avaliadores ANÔNIMOS ("Avaliador 1", "Avaliador 2"...).
  *
- * O servidor decide quem pode editar; este componente apenas obedece.
+ * O servidor decide quem pode editar e quais nomes aparecem; este componente
+ * apenas mostra o que recebeu.
  *
  * @param {Object} props
  * @param {string} props.grupoId UUID do grupo.
@@ -192,13 +196,28 @@ function AvisoPeriodo({ periodo, destaque = false }) {
   );
 }
 
-/** Resumo somente leitura da avaliação de um avaliador. */
+/**
+ * Resumo somente leitura da avaliação de um avaliador.
+ *
+ * O que aparece no título depende do que o servidor enviou:
+ * - Professor: nome real + selo com o nome genérico (ex.: "Maria Souza" [Avaliador 2]).
+ * - Líder e Vice-Líder: só "Avaliador 2" (o nome real nunca chega aqui).
+ */
 function CartaoAvaliador({ avaliacao }) {
+  const { nome, rotulo } = avaliacao.avaliador ?? {};
+  const titulo = nome ?? rotulo ?? 'Avaliador';
+  const selo = rotulo && nome && nome !== rotulo ? rotulo : null;
+
   return (
     <Card className="p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="font-semibold text-text">{avaliacao.avaliador?.nome ?? 'Avaliador'}</p>
+          <p className="flex flex-wrap items-center gap-2 font-semibold text-text">
+            {titulo}
+            {selo && (
+              <span className="rounded-full bg-primary-soft px-2 py-0.5 text-xs font-bold text-primary">{selo}</span>
+            )}
+          </p>
           <p className="text-xs text-text-muted">Atualizada em {formatarData(avaliacao.updated_at)}</p>
         </div>
         <span className="rounded-full bg-primary-soft px-3 py-1 text-sm font-bold text-primary">
@@ -209,13 +228,13 @@ function CartaoAvaliador({ avaliacao }) {
       <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
         {BLOCOS.map((bloco) => {
           const nota = avaliacao.notas[bloco.id];
-          const rotulo = ESCALA.find((item) => item.valor === nota)?.rotulo;
+          const rotuloNota = ESCALA.find((item) => item.valor === nota)?.rotulo;
           return (
             <div key={bloco.id} className="rounded-lg border border-border bg-surface-muted px-3 py-2">
               <p className="text-xs text-text-muted">{bloco.titulo}</p>
               <p className="font-semibold text-text">
                 {formatarNota(nota)}{' '}
-                <span className="text-xs font-normal text-text-muted">{rotulo}</span>
+                <span className="text-xs font-normal text-text-muted">{rotuloNota}</span>
               </p>
             </div>
           );

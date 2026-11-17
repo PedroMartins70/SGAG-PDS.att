@@ -5,6 +5,7 @@ import Card from './ui/Card.jsx';
 import Modal from './ui/Modal.jsx';
 import Input from './ui/Input.jsx';
 import ItemArquivo from './ItemArquivo.jsx';
+import RelatoriosProfessor from './RelatoriosProfessor.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import {
@@ -24,10 +25,18 @@ import {
 const CLASSE_CAMPO =
   'w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-text placeholder:text-text-muted transition-all focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15';
 
+/** Abas da área de materiais do professor. */
+const ABAS = [
+  { key: 'aulas', rotulo: 'Slides das aulas' },
+  { key: 'modelos', rotulo: 'Modelo do trabalho escrito' },
+  { key: 'relatorios', rotulo: 'Relatórios' },
+];
+
 /**
  * Área do Professor para gerenciar os materiais:
  * - Slides das aulas: enviados por turma (uma ou várias de uma vez), com título e observação.
  * - Modelo do trabalho escrito (Word): um por bimestre, vale para todas as turmas.
+ * - Relatórios: links do Google Docs que valem para todas as turmas.
  *
  * @returns {JSX.Element} Tela de materiais do professor.
  */
@@ -39,15 +48,13 @@ export default function MateriaisProfessor() {
       <div>
         <h2 className="font-display text-2xl font-bold text-text">Materiais</h2>
         <p className="text-text-muted">
-          Envie os slides das aulas para as turmas e o modelo do trabalho escrito de cada bimestre.
+          Envie os slides das aulas para as turmas, o modelo do trabalho escrito de cada bimestre e os
+          relatórios (links do Google Docs).
         </p>
       </div>
 
       <div className="flex gap-2 overflow-x-auto border-b border-border">
-        {[
-          { key: 'aulas', rotulo: 'Slides das aulas' },
-          { key: 'modelos', rotulo: 'Modelo do trabalho escrito' },
-        ].map((item) => (
+        {ABAS.map((item) => (
           <button
             key={item.key}
             type="button"
@@ -63,7 +70,7 @@ export default function MateriaisProfessor() {
         ))}
       </div>
 
-      {aba === 'aulas' ? <AbaAulas /> : <AbaModelos />}
+      {aba === 'aulas' ? <AbaAulas /> : aba === 'modelos' ? <AbaModelos /> : <RelatoriosProfessor />}
     </div>
   );
 }

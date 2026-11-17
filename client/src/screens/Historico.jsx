@@ -39,6 +39,10 @@ function formatarData(isoDate) {
  * Acessível para Professor, Líder e Vice-Líder do grupo (e Avaliador, que vê
  * apenas as próprias alterações da banca).
  *
+ * Nas alterações da banca, o líder e o vice veem os avaliadores como
+ * "Avaliador 1", "Avaliador 2"...; o professor vê o nome real com o nome
+ * genérico ao lado.
+ *
  * @returns {JSX.Element} Página de histórico.
  */
 export default function Historico() {
@@ -183,6 +187,7 @@ function EventoIntegrante({ evento }) {
 function EventoBanca({ evento }) {
   const novo = evento.acao === 'INSERT';
   const anterior = evento.notas_anteriores;
+  const autor = descreverAvaliador(evento.usuario);
 
   return (
     <Card className="p-4">
@@ -195,8 +200,7 @@ function EventoBanca({ evento }) {
           </p>
           <p className="text-xs text-text-muted">
             {formatarData(evento.data)}
-            {evento.usuario?.nome ? ` · por ${evento.usuario.nome}` : ''}
-            {evento.usuario?.role ? ` (${rotuloRole(evento.usuario.role)})` : ''}
+            {autor ? ` · por ${autor}` : ''}
           </p>
 
           {evento.notas && (
@@ -246,6 +250,22 @@ function EventoBanca({ evento }) {
       </div>
     </Card>
   );
+}
+
+/**
+ * Texto de quem lançou a avaliação da banca, conforme o que o servidor enviou:
+ * - Professor: "Maria Souza (Avaliador 2)".
+ * - Líder/Vice: "Avaliador 2" (o nome real nunca chega).
+ * - O próprio avaliador: só o seu nome.
+ *
+ * @param {{nome: string|null, rotulo: string|null}|null} usuario Identificação enviada pela API.
+ * @returns {string} Texto pronto para exibir (vazio se não houver nada).
+ */
+function descreverAvaliador(usuario) {
+  if (!usuario) return '';
+  const { nome, rotulo } = usuario;
+  if (nome && rotulo && nome !== rotulo) return `${nome} (${rotulo})`;
+  return nome ?? rotulo ?? '';
 }
 
 /**

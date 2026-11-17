@@ -3,19 +3,21 @@ import { Download, ExternalLink, Loader2 } from 'lucide-react';
 import Button from './ui/Button.jsx';
 import Card from './ui/Card.jsx';
 import ItemArquivo from './ItemArquivo.jsx';
+import RelatoriosConsulta from './RelatoriosConsulta.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { abrirOuBaixar, formatarDataHora, formatarTamanho, podeAbrirNoNavegador } from '../lib/materiais.js';
 
 /**
  * Materiais do professor em modo SOMENTE LEITURA (ver, abrir e baixar).
- * - Líder e Vice-Líder: slides da própria turma + modelo do trabalho escrito.
+ * - Líder e Vice-Líder: relatórios (links do Google Docs), slides da própria
+ *   turma e modelo do trabalho escrito.
  * - Avaliador: apenas o modelo do trabalho escrito (mostrarAulas = false).
  *
  * O servidor decide o que cada perfil pode ver; este componente só mostra.
  *
  * @param {Object} props
- * @param {boolean} [props.mostrarAulas] Se true, mostra também os slides das aulas.
+ * @param {boolean} [props.mostrarAulas] Se true, mostra também os relatórios e os slides das aulas.
  */
 export default function MateriaisConsulta({ mostrarAulas = false }) {
   const { session } = useAuth();
@@ -123,6 +125,9 @@ export default function MateriaisConsulta({ mostrarAulas = false }) {
           })
         )}
       </section>
+
+      {/* Relatórios (links do Google Docs) — só líder e vice */}
+      {mostrarAulas && <RelatoriosConsulta />}
 
       {/* Slides das aulas (só líder e vice) */}
       {mostrarAulas && (

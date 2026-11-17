@@ -3,6 +3,7 @@ import { AppError } from '../middlewares/error.middleware.js';
 import { registrarAuditoria } from '../utils/audit.js';
 import { obterPeriodo } from './periodoBanca.service.js';
 import { garantirAvaliadorNaTurma } from './avaliador.service.js';
+import { ROTULO_AVALIADOR_REMOVIDO, mapaRotulosAvaliadores } from './rotulosAvaliador.service.js';
 
 /** Bloco da ficha -> coluna da tabela avaliacoes_banca. */
 const COLUNAS = {
@@ -11,6 +12,46 @@ const COLUNAS = {
   apresentacao_oral: 'nota_apresentacao_oral',
   pitch: 'nota_pitch',
 };
+
+/**
+ * Quem está olhando decide o que enxerga sobre os avaliadores:
+ * - 'professor': nome real + nome genérico ("Avaliador 2"), para saber quem é quem.
+ * - 'avaliador': o próprio nome (só vê a própria avaliação).
+ * - 'grupo' (líder e vice): SOMENTE o nome genérico. O nome real e o id do
+ *   avaliador nunca saem do servidor para este perfil.
+ *
+ * @param {Object} usuario Usuário autenticado.
+ * @param {Object} grupo Grupo consultado.
+ * @returns {'professor'|'avaliador'|'grupo'} Tipo de visão.
+ */
+function visaoDoUsuario(usuario, grupo) {
+  if (usuario.role === 'professor') return 'professor';
+  if (usuario.role === 'avaliador') return 'avaliador';
+  if (usuario.id === grupo.lider_id || usuario.id === grupo.vice_lider_id) return 'grupo';
+  return null;
+}
+
+/**
+ * Monta a identificação do avaliador conforme a visão.
+ *
+ * @param {string} avaliadorId UUID do avaliador.
+ * @param {Object} contexto Contexto da montagem.
+ * @param {'professor'|'avaliador'|'grupo'} contexto.visao Visão de quem consulta.
+ * @param {Object} contexto.nomes Mapa id -> { id, nome } (vazio na visão 'grupo').
+ * @param {Object} contexto.rotulos Mapa id -> { numero, rotulo }.
+ * @returns {{id?: string, nome: string|null, rotulo: string|null}} Identificação.
+ */
+function identificarAvaliador(avaliadorId, { visao, nomes, rotulos }) {
+  const rotulo = rotulos[avaliadorId]?.rotulo ?? ROTULO_AVALIADOR_REMOVIDO;
+
+  if (visao === 'professor') {
+    return { id: avaliadorId, nome: nomes[avaliadorId]?.nome ?? null, rotulo };
+  }
+  if (visao === 'avaliador') {
+    return { id: avaliadorId, nome: nomes[avaliadorId]?.nome ?? null, rotulo: null };
+  }
+  return { nome: rotulo, rotulo };
+}
 
 /**
  * Busca um grupo e garante que ele existe.
@@ -51,13 +92,13 @@ function validarBimestre(bimestre) {
  * Converte uma linha do banco no formato usado pelo front-end.
  *
  * @param {Object} linha Linha da tabela avaliacoes_banca.
- * @param {Object} nomesPorId Mapa id do avaliador -> { id, nome }.
+ * @param {Object} avaliador Identificação já pronta do avaliador (ver identificarAvaliador).
  * @returns {Object} Avaliação formatada.
  */
-function formatar(linha, nomesPorId = {}) {
+function formatar(linha, avaliador) {
   return {
     id: linha.id,
-    avaliador: nomesPorId[linha.avaliador_id] ?? { id: linha.avaliador_id, nome: null },
+    avaliador,
     notas: {
       topicos: Number(linha.nota_topicos),
       abnt_coerencia: Number(linha.nota_abnt_coerencia),
@@ -76,8 +117,10 @@ function formatar(linha, nomesPorId = {}) {
  * Quem vê o quê:
  * - Avaliador: apenas a própria avaliação (e pode editar), e somente em
  *   grupos das turmas às quais foi vinculado.
- * - Professor: todas as avaliações (somente leitura).
- * - Líder e Vice-Líder: todas as avaliações do SEU grupo (somente leitura).
+ * - Professor: todas as avaliações (somente leitura), com o nome real de cada
+ *   avaliador e o nome genérico ao lado ("Avaliador 2").
+ * - Líder e Vice-Líder: todas as avaliações do SEU grupo (somente leitura),
+ *   mas os avaliadores aparecem ANÔNIMOS ("Avaliador 1", "Avaliador 2"...).
  *
  * @param {string} grupoId UUID do grupo.
  * @param {Object} usuario Usuário autenticado.
@@ -89,13 +132,11 @@ export async function listarAvaliacoesBanca(grupoId, usuario, bimestre = 1) {
   const bimestreValido = validarBimestre(bimestre);
   const grupo = await buscarGrupo(grupoId);
 
-  const ehProfessor = usuario.role === 'professor';
-  const ehAvaliador = usuario.role === 'avaliador';
-  const ehDoGrupo = usuario.id === grupo.lider_id || usuario.id === grupo.vice_lider_id;
-
-  if (!ehProfessor && !ehAvaliador && !ehDoGrupo) {
+  const visao = visaoDoUsuario(usuario, grupo);
+  if (!visao) {
     throw new AppError(403, 'Sem permissao para ver as avaliacoes da banca deste grupo');
   }
+  const ehAvaliador = visao === 'avaliador';
 
   await garantirAvaliadorNaTurma(usuario, grupo.turma_id);
 
@@ -117,13 +158,26 @@ export async function listarAvaliacoesBanca(grupoId, usuario, bimestre = 1) {
     throw new AppError(500, 'Falha ao listar avaliacoes da banca');
   }
 
-  const ids = [...new Set(linhas.map((l) => l.avaliador_id))];
-  const { data: perfis } = ids.length
-    ? await supabaseAdmin.from('profiles').select('id, nome').in('id', ids)
-    : { data: [] };
-  const nomesPorId = Object.fromEntries((perfis ?? []).map((p) => [p.id, { id: p.id, nome: p.nome }]));
+  // Os nomes reais só são buscados para quem pode vê-los (professor e o próprio avaliador).
+  let nomes = {};
+  if (visao !== 'grupo') {
+    const ids = [...new Set(linhas.map((l) => l.avaliador_id))];
+    const { data: perfis } = ids.length
+      ? await supabaseAdmin.from('profiles').select('id, nome').in('id', ids)
+      : { data: [] };
+    nomes = Object.fromEntries((perfis ?? []).map((p) => [p.id, { id: p.id, nome: p.nome }]));
+  }
 
-  const avaliacoes = linhas.map((linha) => formatar(linha, nomesPorId));
+  const rotulos = ehAvaliador ? {} : await mapaRotulosAvaliadores();
+
+  // Professor e líder/vice veem a lista sempre na mesma ordem: Avaliador 1, 2, 3...
+  const numeroDe = (linha) => rotulos[linha.avaliador_id]?.numero ?? Number.MAX_SAFE_INTEGER;
+  const linhasOrdenadas = ehAvaliador ? linhas : [...linhas].sort((a, b) => numeroDe(a) - numeroDe(b));
+
+  const avaliacoes = linhasOrdenadas.map((linha) =>
+    formatar(linha, identificarAvaliador(linha.avaliador_id, { visao, nomes, rotulos }))
+  );
+
   const soma = avaliacoes.reduce((acc, a) => acc + a.nota_total, 0);
 
   return {
@@ -216,18 +270,18 @@ export async function salvarAvaliacaoBanca({ grupoId, bimestre, notas, comentari
     nota_total_anterior: existente ? Number(existente.nota_total) : null,
   });
 
-  return formatar(data, { [usuario.id]: { id: usuario.id, nome: usuario.nome ?? null } });
+  return formatar(data, { id: usuario.id, nome: usuario.nome ?? null, rotulo: null });
 }
 
 /**
  * Lista o histórico (auditoria) das avaliações da banca de um grupo,
- * mais recente primeiro, com o nome de quem avaliou.
+ * mais recente primeiro.
  *
  * Quem vê o quê:
  * - Avaliador: apenas as próprias alterações, e somente de grupos das
  *   turmas às quais foi vinculado.
- * - Professor: todas.
- * - Líder e Vice-Líder: todas as do SEU grupo.
+ * - Professor: todas, com o nome real de quem avaliou e o nome genérico.
+ * - Líder e Vice-Líder: todas as do SEU grupo, com os avaliadores ANÔNIMOS.
  *
  * @param {string} grupoId UUID do grupo.
  * @param {Object} usuario Usuário autenticado.
@@ -237,13 +291,11 @@ export async function salvarAvaliacaoBanca({ grupoId, bimestre, notas, comentari
 export async function listarHistoricoBanca(grupoId, usuario) {
   const grupo = await buscarGrupo(grupoId);
 
-  const ehProfessor = usuario.role === 'professor';
-  const ehAvaliador = usuario.role === 'avaliador';
-  const ehDoGrupo = usuario.id === grupo.lider_id || usuario.id === grupo.vice_lider_id;
-
-  if (!ehProfessor && !ehAvaliador && !ehDoGrupo) {
+  const visao = visaoDoUsuario(usuario, grupo);
+  if (!visao) {
     throw new AppError(403, 'Sem permissao para consultar o historico da banca deste grupo');
   }
+  const ehAvaliador = visao === 'avaliador';
 
   await garantirAvaliadorNaTurma(usuario, grupo.turma_id);
 
@@ -263,25 +315,32 @@ export async function listarHistoricoBanca(grupoId, usuario) {
     throw new AppError(500, 'Falha ao consultar historico da banca');
   }
 
-  const ids = [...new Set(logs.map((l) => l.usuario_id).filter(Boolean))];
-  const { data: perfis } = ids.length
-    ? await supabaseAdmin.from('profiles').select('id, nome, role').in('id', ids)
-    : { data: [] };
-  const perfisPorId = Object.fromEntries((perfis ?? []).map((p) => [p.id, p]));
+  // Os nomes reais só são buscados para quem pode vê-los (professor e o próprio avaliador).
+  let nomes = {};
+  if (visao !== 'grupo') {
+    const ids = [...new Set(logs.map((l) => l.usuario_id).filter(Boolean))];
+    const { data: perfis } = ids.length
+      ? await supabaseAdmin.from('profiles').select('id, nome').in('id', ids)
+      : { data: [] };
+    nomes = Object.fromEntries((perfis ?? []).map((p) => [p.id, { id: p.id, nome: p.nome }]));
+  }
 
-  return logs.map((log) => ({
-    id: log.id,
-    tipo: 'banca',
-    acao: log.acao,
-    data: log.created_at,
-    bimestre: log.detalhes?.bimestre ?? null,
-    usuario: perfisPorId[log.usuario_id]
-      ? { nome: perfisPorId[log.usuario_id].nome, role: perfisPorId[log.usuario_id].role }
-      : null,
-    notas: log.detalhes?.notas ?? null,
-    notas_anteriores: log.detalhes?.notas_anteriores ?? null,
-    nota_total: log.detalhes?.nota_total ?? null,
-    nota_total_anterior: log.detalhes?.nota_total_anterior ?? null,
-    comentario: log.detalhes?.comentario ?? null,
-  }));
+  const rotulos = ehAvaliador ? {} : await mapaRotulosAvaliadores();
+
+  return logs.map((log) => {
+    const identificacao = identificarAvaliador(log.usuario_id, { visao, nomes, rotulos });
+    return {
+      id: log.id,
+      tipo: 'banca',
+      acao: log.acao,
+      data: log.created_at,
+      bimestre: log.detalhes?.bimestre ?? null,
+      usuario: { nome: identificacao.nome, rotulo: identificacao.rotulo, role: 'avaliador' },
+      notas: log.detalhes?.notas ?? null,
+      notas_anteriores: log.detalhes?.notas_anteriores ?? null,
+      nota_total: log.detalhes?.nota_total ?? null,
+      nota_total_anterior: log.detalhes?.nota_total_anterior ?? null,
+      comentario: log.detalhes?.comentario ?? null,
+    };
+  });
 }
