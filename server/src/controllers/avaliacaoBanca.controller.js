@@ -23,14 +23,17 @@ export const listarAvaliacoesBanca = asyncHandler(async (req, res) => {
 /**
  * PUT /api/grupos/:grupoId/avaliacoes-banca
  * Cria ou atualiza a avaliação da banca do avaliador logado.
+ * O corpo traz a nota de cada tópico ("itens"); a nota de cada bloco ("notas")
+ * é calculada pela validação, somando os tópicos.
  */
 export const salvarAvaliacaoBanca = asyncHandler(async (req, res) => {
   const { grupoId } = req.params;
-  const { bimestre, notas, comentario } = avaliacaoBancaSchema.parse(req.body);
+  const { bimestre, notas, itens, comentario } = avaliacaoBancaSchema.parse(req.body);
   const avaliacao = await avaliacaoBancaService.salvarAvaliacaoBanca({
     grupoId,
     bimestre,
     notas,
+    itens,
     comentario,
     usuario: req.user,
   });

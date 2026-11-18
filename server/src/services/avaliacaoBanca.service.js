@@ -105,6 +105,8 @@ function formatar(linha, avaliador) {
       apresentacao_oral: Number(linha.nota_apresentacao_oral),
       pitch: Number(linha.nota_pitch),
     },
+    // Nota de cada tópico (null nas avaliações antigas, feitas com uma nota por bloco)
+    itens: linha.itens ?? null,
     comentario: linha.comentario ?? '',
     nota_total: Number(linha.nota_total),
     updated_at: linha.updated_at,
@@ -202,13 +204,14 @@ export async function listarAvaliacoesBanca(grupoId, usuario, bimestre = 1) {
  * @param {Object} params Parâmetros.
  * @param {string} params.grupoId UUID do grupo.
  * @param {number} params.bimestre Bimestre (1 a 4).
- * @param {{topicos: number, abnt_coerencia: number, apresentacao_oral: number, pitch: number}} params.notas Notas dos 4 blocos.
+ * @param {{topicos: number, abnt_coerencia: number, apresentacao_oral: number, pitch: number}} params.notas Notas dos 4 blocos (soma dos tópicos, calculada na validação).
+ * @param {Object<string, Object<string, number>>} params.itens Nota de cada tópico, por bloco.
  * @param {string} [params.comentario] Observações (até 2500 caracteres).
  * @param {Object} params.usuario Usuário autenticado.
  * @returns {Promise<Object>} Avaliação salva.
  * @throws {AppError} 403 se não for avaliador ou se a turma não for dele.
  */
-export async function salvarAvaliacaoBanca({ grupoId, bimestre, notas, comentario, usuario }) {
+export async function salvarAvaliacaoBanca({ grupoId, bimestre, notas, itens, comentario, usuario }) {
   if (usuario.role !== 'avaliador') {
     throw new AppError(403, 'Apenas avaliadores da banca podem registrar esta avaliacao');
   }
@@ -237,6 +240,7 @@ export async function salvarAvaliacaoBanca({ grupoId, bimestre, notas, comentari
     bimestre: bimestreValido,
     avaliador_id: usuario.id,
     comentario: comentario?.trim() || null,
+    itens,
     updated_at: new Date().toISOString(),
   };
   for (const [bloco, coluna] of Object.entries(COLUNAS)) {
@@ -257,6 +261,7 @@ export async function salvarAvaliacaoBanca({ grupoId, bimestre, notas, comentari
     grupo_id: grupoId,
     bimestre: bimestreValido,
     notas,
+    itens,
     nota_total: Number(data.nota_total),
     comentario: payload.comentario,
     notas_anteriores: existente
@@ -268,6 +273,7 @@ export async function salvarAvaliacaoBanca({ grupoId, bimestre, notas, comentari
         }
       : null,
     nota_total_anterior: existente ? Number(existente.nota_total) : null,
+    itens_anteriores: existente?.itens ?? null,
   });
 
   return formatar(data, { id: usuario.id, nome: usuario.nome ?? null, rotulo: null });

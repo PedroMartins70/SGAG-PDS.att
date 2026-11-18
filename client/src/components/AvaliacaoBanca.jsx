@@ -64,14 +64,14 @@ export default function AvaliacaoBanca({ grupoId, bimestre: bimestreExterno }) {
     carregar();
   }, [carregar]);
 
-  async function salvar({ notas, comentario }) {
+  async function salvar({ itens, comentario }) {
     setSalvando(true);
     setFeedback(null);
     try {
       await api(`/grupos/${grupoId}/avaliacoes-banca`, {
         method: 'PUT',
         token,
-        body: { bimestre, notas, comentario },
+        body: { bimestre, itens, comentario },
       });
       await carregar();
       setFeedback({ tipo: 'ok', texto: 'Avaliação salva!' });
@@ -129,7 +129,9 @@ export default function AvaliacaoBanca({ grupoId, bimestre: bimestreExterno }) {
             </p>
           )}
           <FormularioAvaliacao
-            valoresIniciais={minha ? { notas: minha.notas, comentario: minha.comentario } : undefined}
+            valoresIniciais={
+              minha ? { notas: minha.notas, itens: minha.itens, comentario: minha.comentario } : undefined
+            }
             somenteLeitura={!podeEditar}
             salvando={salvando}
             onSalvar={salvar}
@@ -225,17 +227,34 @@ function CartaoAvaliador({ avaliacao }) {
         </span>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
         {BLOCOS.map((bloco) => {
           const nota = avaliacao.notas[bloco.id];
-          const rotuloNota = ESCALA.find((item) => item.valor === nota)?.rotulo;
+          const notasDosTopicos = avaliacao.itens?.[bloco.id];
+          // Avaliações antigas (uma nota por bloco) mostram o rótulo da escala antiga
+          const rotuloNota = notasDosTopicos ? null : ESCALA.find((item) => item.valor === nota)?.rotulo;
           return (
             <div key={bloco.id} className="rounded-lg border border-border bg-surface-muted px-3 py-2">
               <p className="text-xs text-text-muted">{bloco.titulo}</p>
               <p className="font-semibold text-text">
                 {formatarNota(nota)}{' '}
-                <span className="text-xs font-normal text-text-muted">{rotuloNota}</span>
+                <span className="text-xs font-normal text-text-muted">
+                  {notasDosTopicos ? `/ ${formatarNota(bloco.maximo)}` : rotuloNota}
+                </span>
               </p>
+
+              {notasDosTopicos && (
+                <ul className="mt-2 space-y-1 border-t border-border pt-2">
+                  {bloco.itens.map((item) => (
+                    <li key={item.id} className="flex items-baseline justify-between gap-3 text-xs">
+                      <span className="min-w-0 flex-1 text-text-muted">{item.rotulo}</span>
+                      <span className="shrink-0 font-semibold text-text">
+                        {notasDosTopicos[item.id] === undefined ? '—' : formatarNota(notasDosTopicos[item.id])}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           );
         })}
