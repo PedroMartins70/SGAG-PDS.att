@@ -47,7 +47,8 @@ const ROTULOS_PERFIL = {
  * "Contas e senhas", para gerar uma senha temporária para quem esqueceu a senha.
  * Intuitivo, seguindo a identidade Soft Dashboard.
  *
- * Ao cadastrar uma conta com sucesso, mostra um aviso de confirmação.
+ * Toda ação mostra um aviso: verde quando dá certo e vermelho (com o motivo)
+ * quando falha. Se falhar, a janela continua aberta para tentar de novo.
  *
  * @returns {JSX.Element} Página de cadastro de grupos.
  */
@@ -68,6 +69,7 @@ export default function Grupos() {
   const [formPerfil, setFormPerfil] = useState({ email: '', nome: '', senha: '', role: 'lider', turma_ids: [] });
   const [erroPerfil, setErroPerfil] = useState('');
   const [cadastrandoPerfil, setCadastrandoPerfil] = useState(false);
+  const [ocupado, setOcupado] = useState(false);
 
   /**
    * Carrega turmas, perfis (líderes/vices) e os grupos de cada turma.
@@ -110,6 +112,39 @@ export default function Grupos() {
   async function recarregar(turmaId) {
     const { grupos } = await api(`/turmas/${turmaId}/grupos`, { token });
     setGruposPorTurma((prev) => ({ ...prev, [turmaId]: grupos }));
+  }
+
+  /**
+   * Executa uma ação do professor e avisa o resultado.
+   * - Deu certo: aviso verde, fecha a janela e atualiza a turma.
+   * - Deu errado: aviso vermelho com o motivo e a janela continua aberta.
+   *
+   * @param {Object} opcoes Opções da ação.
+   * @param {Function} opcoes.chamada Função assíncrona com a chamada à API.
+   * @param {string} opcoes.sucesso Mensagem quando der certo.
+   * @param {string} opcoes.falha Mensagem quando falhar sem motivo detalhado.
+   * @param {string} opcoes.turmaId Turma a atualizar depois.
+   * @returns {Promise<boolean>} true se a ação deu certo.
+   */
+  async function executarAcao({ chamada, sucesso, falha, turmaId }) {
+    setOcupado(true);
+    try {
+      await chamada();
+    } catch (e) {
+      toast.erro(e.message || falha);
+      setOcupado(false);
+      return false;
+    }
+
+    toast.sucesso(sucesso);
+    setModal(null);
+    try {
+      await recarregar(turmaId);
+    } catch {
+      toast.erro('Alteração salva, mas não foi possível atualizar a lista. Recarregue a página.');
+    }
+    setOcupado(false);
+    return true;
   }
 
   const lideres = useMemo(() => perfis.filter((p) => p.role === 'lider'), [perfis]);
@@ -187,52 +222,77 @@ export default function Grupos() {
     navigate('/login');
   }
 
-  async function renomearGrupo() {
-    await api(`/grupos/${modal.grupoId}`, { method: 'PUT', body: { nome: form.nome }, token });
-    const turmaId = modal.turmaId;
-    setModal(null);
-    await recarregar(turmaId);
-  }
-
-  async function excluirGrupo() {
-    await api(`/grupos/${modal.grupoId}`, { method: 'DELETE', token });
-    const turmaId = modal.turmaId;
-    setModal(null);
-    await recarregar(turmaId);
-  }
-
-  async function adicionarIntegrante() {
-    await api(`/grupos/${modal.grupoId}/integrantes`, {
-      method: 'POST',
-      body: { nome_aluno: form.integrante },
-      token,
+  function renomearGrupo() {
+    const { grupoId, turmaId } = modal;
+    const novoNome = form.nome.trim();
+    return executarAcao({
+      chamada: () => api(`/grupos/${grupoId}`, { method: 'PUT', body: { nome: form.nome }, token }),
+      sucesso: `Grupo renomeado para "${novoNome}"!`,
+      falha: 'Não foi possível renomear o grupo.',
+      turmaId,
     });
-    const turmaId = modal.turmaId;
-    setModal(null);
-    await recarregar(turmaId);
   }
 
-  async function removerIntegrante(grupoId, turmaId, integranteId) {
-    await api(`/grupos/${grupoId}/integrantes/${integranteId}`, { method: 'DELETE', token });
-    await recarregar(turmaId);
-  }
-
-  async function designarLider() {
-    await api(`/grupos/${modal.grupoId}/lider`, { method: 'PUT', body: { perfil_id: form.perfilId }, token });
-    const turmaId = modal.turmaId;
-    setModal(null);
-    await recarregar(turmaId);
-  }
-
-  async function designarVice() {
-    await api(`/grupos/${modal.grupoId}/vice-lider`, {
-      method: 'PUT',
-      body: { perfil_id: form.perfilId },
-      token,
+  function excluirGrupo() {
+    const { grupoId, turmaId, nome } = modal;
+    return executarAcao({
+      chamada: () => api(`/grupos/${grupoId}`, { method: 'DELETE', token }),
+      sucesso: `Grupo "${nome}" excluído.`,
+      falha: 'Não foi possível excluir o grupo.',
+      turmaId,
     });
-    const turmaId = modal.turmaId;
-    setModal(null);
-    await recarregar(turmaId);
+  }
+
+  function adicionarIntegrante() {
+    const { grupoId, turmaId } = modal;
+    const nomeAluno = form.integrante.trim();
+    return executarAcao({
+      chamada: () =>
+        api(`/grupos/${grupoId}/integrantes`, {
+          method: 'POST',
+          body: { nome_aluno: form.integrante },
+          token,
+        }),
+      sucesso: `${nomeAluno} adicionado ao grupo!`,
+      falha: 'Não foi possível adicionar o integrante.',
+      turmaId,
+    });
+  }
+
+  function removerIntegrante(grupoId, turmaId, integranteId, nomeAluno) {
+    return executarAcao({
+      chamada: () => api(`/grupos/${grupoId}/integrantes/${integranteId}`, { method: 'DELETE', token }),
+      sucesso: `${nomeAluno} removido do grupo.`,
+      falha: 'Não foi possível remover o integrante.',
+      turmaId,
+    });
+  }
+
+  function designarLider() {
+    const { grupoId, turmaId } = modal;
+    const nomePerfil = perfis.find((p) => p.id === form.perfilId)?.nome ?? 'Perfil';
+    return executarAcao({
+      chamada: () => api(`/grupos/${grupoId}/lider`, { method: 'PUT', body: { perfil_id: form.perfilId }, token }),
+      sucesso: `${nomePerfil} definido como Líder do grupo!`,
+      falha: 'Não foi possível designar o líder.',
+      turmaId,
+    });
+  }
+
+  function designarVice() {
+    const { grupoId, turmaId } = modal;
+    const nomePerfil = perfis.find((p) => p.id === form.perfilId)?.nome ?? 'Perfil';
+    return executarAcao({
+      chamada: () =>
+        api(`/grupos/${grupoId}/vice-lider`, {
+          method: 'PUT',
+          body: { perfil_id: form.perfilId },
+          token,
+        }),
+      sucesso: `${nomePerfil} definido como Vice-Líder do grupo!`,
+      falha: 'Não foi possível designar o vice-líder.',
+      turmaId,
+    });
   }
 
   if (carregando) {
@@ -360,8 +420,8 @@ export default function Grupos() {
           className="space-y-4"
         >
           <Input label="Novo nome" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} required autoFocus />
-          <Button type="submit" className="w-full" disabled={!form.nome.trim()}>
-            Salvar
+          <Button type="submit" className="w-full" disabled={!form.nome.trim() || ocupado}>
+            {ocupado ? 'Salvando...' : 'Salvar'}
           </Button>
         </form>
       </Modal>
@@ -374,8 +434,8 @@ export default function Grupos() {
           <Button variant="outline" className="flex-1" onClick={() => setModal(null)}>
             Cancelar
           </Button>
-          <Button variant="danger" className="flex-1" onClick={excluirGrupo}>
-            Excluir
+          <Button variant="danger" className="flex-1" onClick={excluirGrupo} disabled={ocupado}>
+            {ocupado ? 'Excluindo...' : 'Excluir'}
           </Button>
         </div>
       </Modal>
@@ -389,8 +449,8 @@ export default function Grupos() {
           className="space-y-4"
         >
           <Input label="Nome do aluno" value={form.integrante} onChange={(e) => setForm({ ...form, integrante: e.target.value })} required autoFocus />
-          <Button type="submit" className="w-full" disabled={!form.integrante.trim()}>
-            Adicionar
+          <Button type="submit" className="w-full" disabled={!form.integrante.trim() || ocupado}>
+            {ocupado ? 'Adicionando...' : 'Adicionar'}
           </Button>
         </form>
       </Modal>
@@ -402,8 +462,8 @@ export default function Grupos() {
           selecionado={form.perfilId}
           onSelecionar={(id) => setForm({ ...form, perfilId: id })}
         />
-        <Button className="mt-4 w-full" onClick={designarLider} disabled={!form.perfilId}>
-          Salvar líder
+        <Button className="mt-4 w-full" onClick={designarLider} disabled={!form.perfilId || ocupado}>
+          {ocupado ? 'Salvando...' : 'Salvar líder'}
         </Button>
       </Modal>
 
@@ -414,8 +474,8 @@ export default function Grupos() {
           selecionado={form.perfilId}
           onSelecionar={(id) => setForm({ ...form, perfilId: id })}
         />
-        <Button className="mt-4 w-full" onClick={designarVice} disabled={!form.perfilId}>
-          Salvar vice-líder
+        <Button className="mt-4 w-full" onClick={designarVice} disabled={!form.perfilId || ocupado}>
+          {ocupado ? 'Salvando...' : 'Salvar vice-líder'}
         </Button>
       </Modal>
 
@@ -540,7 +600,7 @@ export default function Grupos() {
  * @param {Object} props.grupo Grupo a exibir.
  * @param {string} props.turmaId UUID da turma.
  * @param {Function} props.onAbrir Abre um modal de ação.
- * @param {Function} props.onRemoverIntegrante Remove um integrante.
+ * @param {Function} props.onRemoverIntegrante Remove um integrante (grupoId, turmaId, integranteId, nome).
  * @param {Function} props.onDetalhe Abre a página de detalhe/avaliações do grupo.
  * @returns {JSX.Element} Cartão do grupo.
  */
@@ -588,7 +648,7 @@ function GrupoCard({ grupo, turmaId, onAbrir, onRemoverIntegrante, onDetalhe }) 
               <button
                 type="button"
                 aria-label={`Remover ${integrante.nome_aluno}`}
-                onClick={() => onRemoverIntegrante(grupo.id, turmaId, integrante.id)}
+                onClick={() => onRemoverIntegrante(grupo.id, turmaId, integrante.id, integrante.nome_aluno)}
                 className="shrink-0 text-text-muted transition-colors hover:text-danger"
               >
                 <X className="h-4 w-4" />

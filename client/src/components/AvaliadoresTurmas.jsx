@@ -6,6 +6,7 @@ import Badge from './ui/Badge.jsx';
 import Avatar from './ui/Avatar.jsx';
 import Modal from './ui/Modal.jsx';
 import Input from './ui/Input.jsx';
+import { useToast } from './ui/Toast.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 
@@ -14,12 +15,16 @@ import { useAuth } from '../auth/AuthContext.jsx';
  * Lista todos os avaliadores cadastrados com as turmas que cada um avalia e
  * permite: trocar as turmas, editar o nome e excluir o perfil.
  *
+ * Cada ação mostra um aviso: verde quando dá certo; se falhar, a mensagem de
+ * erro aparece dentro da janela, que continua aberta.
+ *
  * @param {Object} props Propriedades do quadro.
  * @param {Array<{id: string, nome: string}>} props.turmas Todas as turmas disponíveis.
  * @returns {JSX.Element} Quadro de avaliadores.
  */
 export default function AvaliadoresTurmas({ turmas = [] }) {
   const { session } = useAuth();
+  const toast = useToast();
   const token = session?.token;
 
   const [avaliadores, setAvaliadores] = useState([]);
@@ -64,44 +69,61 @@ export default function AvaliadoresTurmas({ turmas = [] }) {
   }
 
   /**
-   * Executa uma ação, mostra o erro dentro do modal se falhar e recarrega a lista se der certo.
+   * Executa uma ação e avisa o resultado.
+   * - Deu certo: aviso verde, fecha a janela e recarrega a lista.
+   * - Deu errado: o erro aparece dentro da janela, que continua aberta.
    *
    * @param {Function} acao Função assíncrona com a chamada à API.
+   * @param {string} mensagemSucesso Texto do aviso quando der certo.
    */
-  async function executar(acao) {
+  async function executar(acao, mensagemSucesso) {
     setSalvando(true);
     setErroModal('');
     try {
       await acao();
-      setModal(null);
-      await carregar();
     } catch (e) {
       setErroModal(e.message || 'Não foi possível concluir a ação.');
-    } finally {
       setSalvando(false);
+      return;
     }
+
+    toast.sucesso(mensagemSucesso);
+    setModal(null);
+    try {
+      await carregar();
+    } catch {
+      // a lista será atualizada na próxima vez que o painel carregar
+    }
+    setSalvando(false);
   }
 
   const salvarTurmas = () =>
-    executar(() =>
-      api(`/profiles/avaliadores/${modal.avaliador.id}/turmas`, {
-        method: 'PUT',
-        token,
-        body: { turma_ids: turmaIds },
-      })
+    executar(
+      () =>
+        api(`/profiles/avaliadores/${modal.avaliador.id}/turmas`, {
+          method: 'PUT',
+          token,
+          body: { turma_ids: turmaIds },
+        }),
+      `Turmas de ${modal.avaliador.nome} atualizadas!`
     );
 
   const salvarNome = () =>
-    executar(() =>
-      api(`/profiles/avaliadores/${modal.avaliador.id}`, {
-        method: 'PUT',
-        token,
-        body: { nome: nome.trim() },
-      })
+    executar(
+      () =>
+        api(`/profiles/avaliadores/${modal.avaliador.id}`, {
+          method: 'PUT',
+          token,
+          body: { nome: nome.trim() },
+        }),
+      `Nome alterado para ${nome.trim()}!`
     );
 
   const excluir = () =>
-    executar(() => api(`/profiles/avaliadores/${modal.avaliador.id}`, { method: 'DELETE', token }));
+    executar(
+      () => api(`/profiles/avaliadores/${modal.avaliador.id}`, { method: 'DELETE', token }),
+      `Avaliador ${modal.avaliador.nome} excluído.`
+    );
 
   const avaliadorModal = modal?.avaliador;
 

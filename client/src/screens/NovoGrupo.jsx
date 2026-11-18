@@ -6,6 +6,7 @@ import Card from '../components/ui/Card.jsx';
 import Badge from '../components/ui/Badge.jsx';
 import Input from '../components/ui/Input.jsx';
 import ThemeToggle from '../components/ui/ThemeToggle.jsx';
+import { useToast } from '../components/ui/Toast.jsx';
 import { api } from '../services/api.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 
@@ -17,8 +18,11 @@ const LIMITE_INTEGRANTES = 8;
 
 /**
  * Página "Novo Grupo": cadastro de um grupo com nome, Líder e Vice-Líder.
- * Os alunos são opcionais (até 5 aqui): o Líder e o Vice-Líder podem adicionar
+ * Os alunos são opcionais (até 8 aqui): o Líder e o Vice-Líder podem adicionar
  * os demais integrantes depois, pela tela deles.
+ *
+ * Ao criar o grupo, mostra um aviso de confirmação (que continua visível na
+ * tela de grupos, para onde o professor volta).
  *
  * @returns {JSX.Element} Página de novo grupo.
  */
@@ -26,6 +30,7 @@ export default function NovoGrupo() {
   const { turmaId } = useParams();
   const { session } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
 
   const [turma, setTurma] = useState(null);
   const [perfis, setPerfis] = useState([]);
@@ -62,7 +67,7 @@ export default function NovoGrupo() {
   const lideres = useMemo(() => perfis.filter((p) => p.role === 'lider'), [perfis]);
   const vices = useMemo(() => perfis.filter((p) => p.role === 'vice_lider'), [perfis]);
 
-  /** Adiciona um campo de integrante vazio (limite de 5). */
+  /** Adiciona um campo de integrante vazio (limite de 8). */
   function adicionarIntegrante() {
     setIntegrantes((atual) => (atual.length < LIMITE_INTEGRANTES ? [...atual, ''] : atual));
   }
@@ -81,6 +86,8 @@ export default function NovoGrupo() {
 
   /**
    * Envia a criação completa do grupo.
+   * Se der certo, mostra o aviso e volta para a lista de grupos. Se der erro,
+   * a mensagem aparece no topo do formulário e nada é perdido.
    *
    * @param {React.FormEvent} evento Evento de submissão.
    */
@@ -100,6 +107,7 @@ export default function NovoGrupo() {
           integrantes: integrantes.filter((n) => n.trim()),
         },
       });
+      toast.sucesso(`Grupo "${nome.trim()}" criado com sucesso!`);
       navigate('/grupos');
     } catch (e) {
       setErro(e.message || 'Nao foi possivel criar o grupo.');
