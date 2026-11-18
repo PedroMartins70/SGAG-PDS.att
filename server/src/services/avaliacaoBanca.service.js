@@ -5,6 +5,28 @@ import { obterPeriodo } from './periodoBanca.service.js';
 import { garantirAvaliadorNaTurma } from './avaliador.service.js';
 import { ROTULO_AVALIADOR_REMOVIDO, mapaRotulosAvaliadores } from './rotulosAvaliador.service.js';
 
+/** Separador entre os comentários juntos: 5 quebras de linha (4 linhas em branco no meio). */
+const SEPARADOR_COMENTARIOS = '\n\n\n\n\n';
+
+/**
+ * Junta os comentários de todos os avaliadores em um único texto, para o líder
+ * e o vice lerem sem saber quem escreveu cada um.
+ *
+ * Os comentários saem em ORDEM ALFABÉTICA, e não na ordem de "Avaliador 1, 2, 3".
+ * Se saíssem na ordem dos avaliadores, a posição de cada comentário entregaria
+ * quem o escreveu. Comentários vazios ficam de fora.
+ *
+ * @param {Array<string|null|undefined>} comentarios Comentários de cada avaliação.
+ * @returns {string} Texto único (vazio se ninguém comentou).
+ */
+function juntarComentarios(comentarios) {
+  return comentarios
+    .map((texto) => String(texto ?? '').trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    .join(SEPARADOR_COMENTARIOS);
+}
+
 /** Bloco da ficha -> coluna da tabela avaliacoes_banca. */
 const COLUNAS = {
   topicos: 'nota_topicos',
@@ -182,12 +204,23 @@ export async function listarAvaliacoesBanca(grupoId, usuario, bimestre = 1) {
 
   const soma = avaliacoes.reduce((acc, a) => acc + a.nota_total, 0);
 
+  // Líder e vice: os comentários saem de cada avaliação (assim não dá para ligar um
+  // comentário a um "Avaliador N") e vão juntos em um campo só. Professor e avaliador
+  // recebem tudo como sempre, com o comentário em cada avaliação.
+  let avaliacoesVisiveis = avaliacoes;
+  let comentariosAgrupados = null;
+  if (visao === 'grupo') {
+    comentariosAgrupados = juntarComentarios(avaliacoes.map((a) => a.comentario));
+    avaliacoesVisiveis = avaliacoes.map((a) => ({ ...a, comentario: '' }));
+  }
+
   return {
     grupo: { id: grupo.id, nome: grupo.nome },
     bimestre: bimestreValido,
     periodo,
     permissao: { ehAvaliador, podeEditar: ehAvaliador && periodo.aberto },
-    avaliacoes,
+    avaliacoes: avaliacoesVisiveis,
+    comentarios_agrupados: comentariosAgrupados,
     resumo: {
       quantidade: avaliacoes.length,
       media_total: avaliacoes.length ? Math.round((soma / avaliacoes.length) * 100) / 100 : null,
@@ -346,7 +379,9 @@ export async function listarHistoricoBanca(grupoId, usuario) {
       notas_anteriores: log.detalhes?.notas_anteriores ?? null,
       nota_total: log.detalhes?.nota_total ?? null,
       nota_total_anterior: log.detalhes?.nota_total_anterior ?? null,
-      comentario: log.detalhes?.comentario ?? null,
+      // Líder e vice não veem o comentário de cada avaliador (eles leem os comentários
+      // juntos, na tela de notas da banca). Professor e avaliador veem como sempre.
+      comentario: visao === 'grupo' ? null : (log.detalhes?.comentario ?? null),
     };
   });
 }

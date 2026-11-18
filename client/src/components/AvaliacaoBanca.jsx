@@ -161,6 +161,11 @@ export default function AvaliacaoBanca({ grupoId, bimestre: bimestreExterno }) {
               {dados.avaliacoes.map((avaliacao) => (
                 <CartaoAvaliador key={avaliacao.id} avaliacao={avaliacao} />
               ))}
+
+              {/* Só líder e vice recebem este campo: todos os comentários juntos, sem identificar o avaliador */}
+              {typeof dados.comentarios_agrupados === 'string' && (
+                <ComentariosJuntos texto={dados.comentarios_agrupados} />
+              )}
             </>
           ) : (
             <Card className="p-6 text-center text-sm text-text-muted">
@@ -264,6 +269,40 @@ function CartaoAvaliador({ avaliacao }) {
         <p className="mt-3 whitespace-pre-wrap rounded-lg bg-canvas px-3 py-2 text-sm text-text">
           {avaliacao.comentario}
         </p>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * Comentários de todos os avaliadores reunidos em um único bloco, para o líder e
+ * o vice. Não mostra quem escreveu cada um. O servidor já manda o texto pronto, com
+ * 5 quebras de linha entre um comentário e outro; a barra de rolagem evita que o
+ * bloco fique gigante.
+ *
+ * @param {Object} props Propriedades.
+ * @param {string} props.texto Comentários juntos (vazio se ninguém comentou).
+ * @returns {JSX.Element} Bloco de comentários.
+ */
+function ComentariosJuntos({ texto }) {
+  return (
+    <Card className="p-4 sm:p-5">
+      <h3 className="font-display text-base font-bold text-text">Comentários da banca</h3>
+      <p className="mt-1 text-xs text-text-muted">
+        Todos os comentários dos avaliadores, reunidos e sem identificação.
+      </p>
+
+      {texto ? (
+        <div
+          role="region"
+          aria-label="Comentários da banca"
+          tabIndex={0}
+          className="mt-3 max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-canvas px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+        >
+          {texto}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-text-muted">Nenhum avaliador deixou comentário neste bimestre.</p>
       )}
     </Card>
   );
